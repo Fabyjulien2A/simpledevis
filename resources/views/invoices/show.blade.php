@@ -54,7 +54,7 @@
                     </div>
 
                     {{-- Infos principales --}}
-                    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                    <div class="grid grid-cols-1 gap-6 lg:grid-cols-4">
 
                         <div class="rounded-2xl border border-gray-100 bg-gray-50 p-5">
                             <p class="text-sm font-medium text-gray-500">Client</p>
@@ -101,27 +101,27 @@
                                 </span>
                             </div>
                         </div>
+
+                        <div class="rounded-2xl border border-gray-100 bg-gray-50 p-5">
+                            <p class="text-sm font-medium text-gray-500">Échéance</p>
+
+                            @if($invoice->due_date)
+                                <p class="mt-2 text-base font-semibold text-gray-900">
+                                    {{ $invoice->due_date->format('d/m/Y') }}
+                                </p>
+
+                                @if($invoice->is_overdue)
+                                    <p class="mt-1 text-sm font-medium text-red-600">
+                                        En retard de paiement
+                                    </p>
+                                @endif
+                            @else
+                                <p class="mt-2 text-sm text-gray-500">
+                                    Non définie
+                                </p>
+                            @endif
+                        </div>
                     </div>
-
-                    <div class="rounded-2xl border border-gray-100 bg-gray-50 p-5">
-    <p class="text-sm font-medium text-gray-500">Échéance</p>
-
-    @if($invoice->due_date)
-        <p class="mt-2 text-base font-semibold text-gray-900">
-            {{ $invoice->due_date->format('d/m/Y') }}
-        </p>
-
-        @if($invoice->is_overdue)
-            <p class="mt-1 text-sm text-red-600 font-medium">
-                En retard de paiement
-            </p>
-        @endif
-    @else
-        <p class="mt-2 text-sm text-gray-500">
-            Non définie
-        </p>
-    @endif
-</div>
 
                     {{-- Tableau lignes --}}
                     <div>
@@ -191,7 +191,7 @@
                                         Enregistrer un paiement
                                     </label>
 
-                                    <div class="flex flex-col gap-3 sm:flex-row">
+                                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                                         <input
                                             id="amount"
                                             type="number"
@@ -201,6 +201,16 @@
                                             class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
                                             placeholder="0.00"
                                         >
+
+                                        <select
+                                            name="method"
+                                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                        >
+                                            <option value="virement">Virement</option>
+                                            <option value="carte">Carte bancaire</option>
+                                            <option value="especes">Espèces</option>
+                                            <option value="cheque">Chèque</option>
+                                        </select>
 
                                         <button class="inline-flex items-center justify-center rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-purple-700">
                                             Valider
@@ -265,15 +275,13 @@
                                 </button>
                             </form>
 
-
                             <form action="{{ route('invoices.duplicate', $invoice) }}" method="POST" class="mt-3">
-    @csrf
-    <button type="submit"
-            class="inline-flex w-full items-center justify-center rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-200">
-        Dupliquer la facture
-    </button>
-</form>
-
+                                @csrf
+                                <button type="submit"
+                                        class="inline-flex w-full items-center justify-center rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-200">
+                                    Dupliquer la facture
+                                </button>
+                            </form>
                         </div>
 
                     </div>
@@ -292,16 +300,30 @@
                                         <tr class="border-b bg-gray-50 text-gray-600">
                                             <th class="px-4 py-3 text-left font-medium">Date</th>
                                             <th class="px-4 py-3 text-left font-medium">Montant</th>
+                                            <th class="px-4 py-3 text-left font-medium">Mode</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-gray-100 bg-white">
                                         @foreach($invoice->payments as $payment)
+                                            @php
+                                                $methodLabel = match ($payment->method) {
+                                                    'virement' => 'Virement',
+                                                    'carte' => 'Carte bancaire',
+                                                    'especes' => 'Espèces',
+                                                    'cheque' => 'Chèque',
+                                                    default => ucfirst($payment->method),
+                                                };
+                                            @endphp
+
                                             <tr class="hover:bg-gray-50 transition">
                                                 <td class="px-4 py-3 text-gray-700">
                                                     {{ $payment->paid_at->format('d/m/Y') }}
                                                 </td>
                                                 <td class="px-4 py-3 font-medium text-gray-900">
                                                     {{ number_format($payment->amount, 2) }} €
+                                                </td>
+                                                <td class="px-4 py-3 text-gray-700">
+                                                    {{ $methodLabel }}
                                                 </td>
                                             </tr>
                                         @endforeach

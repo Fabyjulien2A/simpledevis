@@ -11,6 +11,7 @@ class Payment extends Model
         'invoice_id',
         'amount',
         'paid_at',
+        'method',
     ];
 
     protected $casts = [

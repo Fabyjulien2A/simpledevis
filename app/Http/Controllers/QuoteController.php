@@ -17,15 +17,36 @@ class QuoteController extends Controller
     /**
      * Liste des devis
      */
-    public function index(): View
-    {
-        $quotes = Quote::where('user_id', auth()->id())
-            ->with('client')
-            ->latest()
-            ->paginate(10);
+    public function index(Request $request): View
+{
+    $query = Quote::where('user_id', auth()->id())
+        ->with('client', 'invoice');
 
-        return view('quotes.index', compact('quotes'));
+    // Recherche
+    if ($request->filled('search')) {
+        $search = $request->search;
+
+        $query->where(function ($q) use ($search) {
+            $q->where('quote_number', 'like', "%{$search}%")
+              ->orWhere('total_ttc', 'like', "%{$search}%")
+              ->orWhereHas('client', function ($q2) use ($search) {
+                  $q2->where('first_name', 'like', "%{$search}%")
+                     ->orWhere('last_name', 'like', "%{$search}%")
+                     ->orWhere('email', 'like', "%{$search}%")
+                     ->orWhere('company_name', 'like', "%{$search}%");
+              });
+        });
     }
+
+    // Filtre statut
+    if ($request->filled('status')) {
+        $query->where('status', $request->status);
+    }
+
+    $quotes = $query->latest()->paginate(10)->withQueryString();
+
+    return view('quotes.index', compact('quotes'));
+}
 
     /**
      * Formulaire création devis

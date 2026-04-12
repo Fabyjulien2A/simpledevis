@@ -64,6 +64,45 @@
                 </div>
             </div>
 
+            {{-- Filtres --}}
+            <div class="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+                <form method="GET" id="quote-filter-form" class="flex flex-col gap-3 md:flex-row md:items-center">
+                    <input
+                        type="text"
+                        name="search"
+                        value="{{ request('search') }}"
+                        placeholder="Rechercher par numéro, client ou montant..."
+                        class="w-full md:w-1/3 rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        oninput="clearTimeout(window.quoteSearchTimeout); window.quoteSearchTimeout = setTimeout(() => this.form.submit(), 400);"
+                    >
+
+                    <select
+                        name="status"
+                        class="rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        onchange="this.form.submit()"
+                    >
+                        <option value="">Tous les statuts</option>
+                        <option value="brouillon" {{ request('status') == 'brouillon' ? 'selected' : '' }}>
+                            Brouillon
+                        </option>
+                        <option value="envoye" {{ request('status') == 'envoye' ? 'selected' : '' }}>
+                            Envoyé
+                        </option>
+                        <option value="accepte" {{ request('status') == 'accepte' ? 'selected' : '' }}>
+                            Accepté
+                        </option>
+                        <option value="refuse" {{ request('status') == 'refuse' ? 'selected' : '' }}>
+                            Refusé
+                        </option>
+                    </select>
+
+                    <a href="{{ route('quotes.index') }}"
+                       class="text-sm text-gray-500 hover:underline">
+                        Réinitialiser
+                    </a>
+                </form>
+            </div>
+
             {{-- Table des devis --}}
             <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
                 <div class="border-b border-gray-100 px-6 py-5">
@@ -132,32 +171,32 @@
                                     </td>
 
                                     <td class="px-6 py-4">
-                                      <div class="flex justify-end gap-2">
-    <a href="{{ route('quotes.show', $quote) }}"
-       class="rounded-md bg-blue-50 px-3 py-1 text-xs font-medium text-blue-600 hover:bg-blue-100 transition">
-        Voir
-    </a>
+                                        <div class="flex justify-end gap-2">
+                                            <a href="{{ route('quotes.show', $quote) }}"
+                                               class="rounded-md bg-blue-50 px-3 py-1 text-xs font-medium text-blue-600 hover:bg-blue-100 transition">
+                                                Voir
+                                            </a>
 
-    <a href="{{ route('quotes.edit', $quote) }}"
-       class="rounded-md bg-yellow-50 px-3 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-100 transition">
-        Modifier
-    </a>
+                                            <a href="{{ route('quotes.edit', $quote) }}"
+                                               class="rounded-md bg-yellow-50 px-3 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-100 transition">
+                                                Modifier
+                                            </a>
 
-    <form action="{{ route('quotes.duplicate', $quote) }}" method="POST">
-        @csrf
-        <button type="submit"
-                class="rounded-md bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200 transition">
-            Dupliquer
-        </button>
-    </form>
-</div>
+                                            <form action="{{ route('quotes.duplicate', $quote) }}" method="POST">
+                                                @csrf
+                                                <button type="submit"
+                                                        class="rounded-md bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-200 transition">
+                                                    Dupliquer
+                                                </button>
+                                            </form>
+                                        </div>
                                     </td>
                                 </tr>
                             @empty
                                 <tr>
                                     <td colspan="6" class="px-6 py-16 text-center">
                                         <div class="mx-auto max-w-md">
-                                            <div class="text-4xl mb-3">📄</div>
+                                            <div class="mb-3 text-4xl">📄</div>
                                             <h4 class="text-lg font-semibold text-gray-900">Aucun devis pour le moment</h4>
                                             <p class="mt-2 text-sm text-gray-500">
                                                 Commence par créer ton premier devis pour voir apparaître ta liste ici.

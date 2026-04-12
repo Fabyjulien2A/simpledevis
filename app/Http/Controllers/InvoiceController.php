@@ -17,12 +17,38 @@ class InvoiceController extends Controller
     /**
      * Liste des factures
      */
-    public function index(): View
+    public function index(Request $request): View
     {
-        $invoices = Invoice::where('user_id', auth()->id())
-            ->with('client', 'quote', 'items')
-            ->latest()
-            ->paginate(10);
+        $query = Invoice::where('user_id', auth()->id())
+            ->with('client', 'quote');
+
+        // Recherche
+        if ($request->filled('search')) {
+            $search = $request->search;
+
+            $query->where(function ($q) use ($search) {
+                $q->where('invoice_number', 'like', "%{$search}%")
+                    ->orWhere('total_ttc', 'like', "%{$search}%")
+                    ->orWhereHas('client', function ($q2) use ($search) {
+                        $q2->where('first_name', 'like', "%{$search}%")
+                            ->orWhere('last_name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%")
+                            ->orWhere('company_name', 'like', "%{$search}%");
+                    });
+            });
+        }
+
+        // Filtre statut
+        if ($request->filled('status')) {
+            if ($request->status === 'overdue') {
+                $query->where('status', '!=', 'payee')
+                    ->whereDate('due_date', '<', now());
+            } else {
+                $query->where('status', $request->status);
+            }
+        }
+
+        $invoices = $query->latest()->paginate(10)->withQueryString();
 
         return view('invoices.index', compact('invoices'));
     }
@@ -219,6 +245,7 @@ class InvoiceController extends Controller
 
         $validated = $request->validate([
             'amount' => ['required', 'numeric', 'min:0.01'],
+            'method' => ['required', 'string'],
         ]);
 
         $currentPaid = (float) $invoice->payments->sum('amount');
@@ -233,6 +260,7 @@ class InvoiceController extends Controller
         Payment::create([
             'invoice_id' => $invoice->id,
             'amount' => $validated['amount'],
+            'method' => $validated['method'],
             'paid_at' => now()->toDateString(),
         ]);
 
@@ -263,42 +291,41 @@ class InvoiceController extends Controller
     }
 
     public function duplicate(Invoice $invoice): RedirectResponse
-{
-    if ($invoice->user_id !== auth()->id()) {
-        abort(403);
-    }
+    {
+        if ($invoice->user_id !== auth()->id()) {
+            abort(403);
+        }
 
-    $invoice->load('items');
+        $invoice->load('items');
 
-    $newInvoice = Invoice::create([
-        'user_id'        => auth()->id(),
-        'client_id'      => $invoice->client_id,
-        'quote_id'       => null,
-        'invoice_number' => Invoice::generateInvoiceNumber(),
-        'date'           => now()->toDateString(),
-        'due_date'       => now()->addDays(30)->toDateString(),
-        'status'         => 'non_payee',
-        'subtotal_ht'    => $invoice->subtotal_ht,
-        'total_tva'      => $invoice->total_tva,
-        'total_ttc'      => $invoice->total_ttc,
-        'amount_paid'    => 0,
-        'notes'          => $invoice->notes,
-    ]);
-
-    foreach ($invoice->items as $item) {
-        InvoiceItem::create([
-            'invoice_id'    => $newInvoice->id,
-            'description'   => $item->description,
-            'quantity'      => $item->quantity,
-            'unit_price_ht' => $item->unit_price_ht,
-            'tva_rate'      => $item->tva_rate,
-            'line_total_ht' => $item->line_total_ht,
+        $newInvoice = Invoice::create([
+            'user_id'        => auth()->id(),
+            'client_id'      => $invoice->client_id,
+            'quote_id'       => null,
+            'invoice_number' => Invoice::generateInvoiceNumber(),
+            'date'           => now()->toDateString(),
+            'due_date'       => now()->addDays(30)->toDateString(),
+            'status'         => 'non_payee',
+            'subtotal_ht'    => $invoice->subtotal_ht,
+            'total_tva'      => $invoice->total_tva,
+            'total_ttc'      => $invoice->total_ttc,
+            'amount_paid'    => 0,
+            'notes'          => $invoice->notes,
         ]);
+
+        foreach ($invoice->items as $item) {
+            InvoiceItem::create([
+                'invoice_id'    => $newInvoice->id,
+                'description'   => $item->description,
+                'quantity'      => $item->quantity,
+                'unit_price_ht' => $item->unit_price_ht,
+                'tva_rate'      => $item->tva_rate,
+                'line_total_ht' => $item->line_total_ht,
+            ]);
+        }
+
+        return redirect()
+            ->route('invoices.show', $newInvoice)
+            ->with('success', 'La facture a bien été dupliquée.');
     }
-
-    return redirect()
-        ->route('invoices.show', $newInvoice)
-        ->with('success', 'La facture a bien été dupliquée.');
-}
-
 }

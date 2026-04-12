@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Client;
 use App\Models\Invoice;
+use App\Models\Payment;
 use App\Models\Quote;
 use Illuminate\View\View;
 
@@ -17,12 +18,26 @@ class DashboardController extends Controller
         $quotesCount = Quote::where('user_id', $userId)->count();
         $invoicesCount = Invoice::where('user_id', $userId)->count();
 
-        $amountCollected = Invoice::where('user_id', $userId)->sum('amount_paid');
+        $monthlyRevenue = Invoice::where('user_id', $userId)
+            ->whereMonth('date', now()->month)
+            ->whereYear('date', now()->year)
+            ->sum('total_ttc');
+
+        $amountCollected = Payment::whereHas('invoice', function ($query) use ($userId) {
+            $query->where('user_id', $userId);
+        })->sum('amount');
+
         $amountToCollect = Invoice::where('user_id', $userId)
             ->get()
             ->sum(function ($invoice) {
-                return (float) $invoice->total_ttc - (float) $invoice->amount_paid;
+                return $invoice->remaining_amount;
             });
+
+        $overdueInvoicesCount = Invoice::where('user_id', $userId)
+            ->where('status', '!=', 'payee')
+            ->whereNotNull('due_date')
+            ->whereDate('due_date', '<', now())
+            ->count();
 
         $unpaidInvoicesCount = Invoice::where('user_id', $userId)
             ->whereIn('status', ['non_payee', 'partiellement_payee'])
@@ -42,8 +57,10 @@ class DashboardController extends Controller
             'clientsCount',
             'quotesCount',
             'invoicesCount',
+            'monthlyRevenue',
             'amountCollected',
             'amountToCollect',
+            'overdueInvoicesCount',
             'unpaidInvoicesCount',
             'recentQuotes',
             'recentInvoices'
