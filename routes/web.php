@@ -7,14 +7,33 @@ use App\Http\Controllers\QuoteController;
 use App\Http\Controllers\CompanySettingController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\SubscriptionController;
 
 Route::get('/', function () {
     return view('welcome');
 });
 
+Route::post('/billing/portal', [App\Http\Controllers\BillingController::class, 'portal'])
+    ->middleware(['auth'])
+    ->name('billing.portal');
+Route::get('/billing', function () {
+    return view('billing.index');
+})->middleware(['auth'])->name('billing.index');
+
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('/billing', [SubscriptionController::class, 'index'])->name('billing.index');
+    Route::post('/subscribe/{plan}', [SubscriptionController::class, 'subscribe'])->name('billing.subscribe');
+    Route::get('/subscribe/success', [SubscriptionController::class, 'success'])->name('billing.success');
+    Route::get('/subscribe/cancel', [SubscriptionController::class, 'cancel'])->name('billing.cancel');
+});
 
 Route::post('/invoices/{invoice}/action', [InvoiceController::class, 'handleAction'])
     ->name('invoices.action');
+
+    Route::get('/tarifs', function () {
+    return view('pricing');
+})->name('pricing');
 
 Route::post('/quotes/{quote}/duplicate', [QuoteController::class, 'duplicate'])
     ->name('quotes.duplicate');
@@ -43,6 +62,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/company', [CompanySettingController::class, 'edit'])->name('company.edit');
     Route::post('/company', [CompanySettingController::class, 'update'])->name('company.update');
 });
+
+
 
 Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show');
 

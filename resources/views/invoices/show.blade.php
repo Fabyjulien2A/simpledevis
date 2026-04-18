@@ -183,41 +183,59 @@
                                 </div>
                             </div>
 
-                            @if($invoice->status !== 'payee')
-                                <form action="{{ route('invoices.addPayment', $invoice) }}" method="POST" class="mt-5">
-                                    @csrf
+                            @if($invoice->payments->count())
+    @php
+        $lastPayment = $invoice->payments->sortByDesc('paid_at')->first();
 
-                                    <label for="amount" class="mb-2 block text-sm font-medium text-gray-700">
-                                        Enregistrer un paiement
-                                    </label>
+        $lastMethodLabel = match ($lastPayment->method) {
+            'virement' => 'Virement',
+            'carte' => 'Carte bancaire',
+            'especes' => 'Espèces',
+            'cheque' => 'Chèque',
+            default => ucfirst($lastPayment->method ?? 'Non renseigné'),
+        };
+    @endphp
 
-                                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                                        <input
-                                            id="amount"
-                                            type="number"
-                                            name="amount"
-                                            step="0.01"
-                                            min="0.01"
-                                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                                            placeholder="0.00"
-                                        >
+    <div class="flex items-center justify-between text-gray-600">
+        <span>Dernier paiement</span>
+        <span class="font-medium text-gray-900">
+            {{ $lastMethodLabel }}
+        </span>
+    </div>
+@endif
 
-                                        <select
-                                            name="method"
-                                            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                                        >
-                                            <option value="virement">Virement</option>
-                                            <option value="carte">Carte bancaire</option>
-                                            <option value="especes">Espèces</option>
-                                            <option value="cheque">Chèque</option>
-                                        </select>
+                            <form action="{{ route('invoices.addPayment', $invoice) }}" method="POST" class="mt-5">
+    @csrf
 
-                                        <button class="inline-flex items-center justify-center rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-purple-700">
-                                            Valider
-                                        </button>
-                                    </div>
-                                </form>
-                            @endif
+    <label class="mb-2 block text-sm font-medium text-gray-700">
+        Enregistrer un paiement
+    </label>
+
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <input
+            type="number"
+            name="amount"
+            step="0.01"
+            min="0.01"
+            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            placeholder="0.00"
+        >
+
+        <select
+            name="method"
+            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        >
+            <option value="virement">Virement</option>
+            <option value="carte">Carte bancaire</option>
+            <option value="especes">Espèces</option>
+            <option value="cheque">Chèque</option>
+        </select>
+
+        <button class="rounded-lg bg-purple-600 px-4 py-2 text-white">
+            Valider
+        </button>
+    </div>
+</form>
                         </div>
 
                         <div class="rounded-2xl border border-gray-100 bg-gray-50 p-5">
@@ -288,50 +306,50 @@
 
                     {{-- Historique des paiements --}}
                     @if($invoice->payments->count())
-                        <div>
-                            <div class="mb-4">
-                                <h4 class="text-lg font-semibold text-gray-800">Historique des paiements</h4>
-                                <p class="text-sm text-gray-500">Liste des paiements enregistrés sur cette facture</p>
-                            </div>
+    <div>
+        <div class="mb-4">
+            <h4 class="text-lg font-semibold text-gray-800">Historique des paiements</h4>
+            <p class="text-sm text-gray-500">Liste des paiements enregistrés sur cette facture</p>
+        </div>
 
-                            <div class="overflow-hidden rounded-2xl border border-gray-100">
-                                <table class="w-full text-sm">
-                                    <thead>
-                                        <tr class="border-b bg-gray-50 text-gray-600">
-                                            <th class="px-4 py-3 text-left font-medium">Date</th>
-                                            <th class="px-4 py-3 text-left font-medium">Montant</th>
-                                            <th class="px-4 py-3 text-left font-medium">Mode</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-gray-100 bg-white">
-                                        @foreach($invoice->payments as $payment)
-                                            @php
-                                                $methodLabel = match ($payment->method) {
-                                                    'virement' => 'Virement',
-                                                    'carte' => 'Carte bancaire',
-                                                    'especes' => 'Espèces',
-                                                    'cheque' => 'Chèque',
-                                                    default => ucfirst($payment->method),
-                                                };
-                                            @endphp
+        <div class="overflow-hidden rounded-2xl border border-gray-100">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b bg-gray-50 text-gray-600">
+                        <th class="px-4 py-3 text-left font-medium">Date</th>
+                        <th class="px-4 py-3 text-left font-medium">Montant</th>
+                        <th class="px-4 py-3 text-left font-medium">Mode</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 bg-white">
+                    @foreach($invoice->payments as $payment)
+                        @php
+                            $methodLabel = match ($payment->method) {
+                                'virement' => 'Virement',
+                                'carte' => 'Carte bancaire',
+                                'especes' => 'Espèces',
+                                'cheque' => 'Chèque',
+                                default => ucfirst($payment->method ?? 'Non renseigné'),
+                            };
+                        @endphp
 
-                                            <tr class="hover:bg-gray-50 transition">
-                                                <td class="px-4 py-3 text-gray-700">
-                                                    {{ $payment->paid_at->format('d/m/Y') }}
-                                                </td>
-                                                <td class="px-4 py-3 font-medium text-gray-900">
-                                                    {{ number_format($payment->amount, 2) }} €
-                                                </td>
-                                                <td class="px-4 py-3 text-gray-700">
-                                                    {{ $methodLabel }}
-                                                </td>
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    @endif
+                        <tr class="hover:bg-gray-50 transition">
+                            <td class="px-4 py-3 text-gray-700">
+                                {{ $payment->paid_at->format('d/m/Y') }}
+                            </td>
+                            <td class="px-4 py-3 font-medium text-gray-900">
+                                {{ number_format($payment->amount, 2) }} €
+                            </td>
+                            <td class="px-4 py-3 text-gray-700">
+                                {{ $methodLabel }}
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    </div>
+@endif
 
                 </div>
             </div>

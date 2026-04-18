@@ -153,6 +153,7 @@
             margin-top: 25px;
             font-size: 11px;
             color: #444;
+            line-height: 1.6;
         }
     </style>
 </head>
@@ -169,7 +170,7 @@
                         @endif
 
                         <div style="font-size: 16px; font-weight: bold; margin-bottom: 6px;">
-                            {{ $company->name ?? auth()->user()->name }}
+                            {{ $company->company_name ?? $company->name ?? auth()->user()->name }}
                         </div>
 
                         @if(!empty($company?->address))
@@ -277,6 +278,25 @@
                                 <strong>Reste à payer :</strong>
                                 {{ number_format($invoice->remaining_amount, 2) }} €
                             </div>
+
+                            @if($invoice->payments->count())
+                                @php
+                                    $lastPayment = $invoice->payments->sortByDesc('paid_at')->first();
+
+                                    $lastMethodLabel = match ($lastPayment->method) {
+                                        'virement' => 'Virement',
+                                        'carte' => 'Carte bancaire',
+                                        'especes' => 'Espèces',
+                                        'cheque' => 'Chèque',
+                                        default => ucfirst($lastPayment->method ?? 'Non renseigné'),
+                                    };
+                                @endphp
+
+                                <div>
+                                    <strong>Dernier mode de paiement :</strong>
+                                    {{ $lastMethodLabel }}
+                                </div>
+                            @endif
                         </div>
                     </td>
                 </tr>
@@ -333,6 +353,30 @@
             </table>
         </div>
 
+        {{-- Historique des paiements --}}
+        @if($invoice->payments->count())
+            <div class="notes">
+                <strong>Paiements enregistrés :</strong><br><br>
+
+                @foreach($invoice->payments as $payment)
+                    @php
+                        $methodLabel = match ($payment->method) {
+                            'virement' => 'Virement',
+                            'carte' => 'Carte bancaire',
+                            'especes' => 'Espèces',
+                            'cheque' => 'Chèque',
+                            default => ucfirst($payment->method ?? 'Non renseigné'),
+                        };
+                    @endphp
+
+                    <div>
+                        - {{ $payment->paid_at->format('d/m/Y') }} :
+                        {{ number_format($payment->amount, 2) }} € ({{ $methodLabel }})
+                    </div>
+                @endforeach
+            </div>
+        @endif
+
         {{-- Notes --}}
         @if(!empty($invoice->notes))
             <div class="notes">
@@ -341,13 +385,25 @@
             </div>
         @endif
 
+        {{-- Conditions --}}
+        <div class="notes">
+    <strong>Conditions de paiement :</strong><br>
+    Paiement à réception de facture.<br>
+
+    <strong>Pénalités de retard :</strong>
+    Tout retard de paiement entraîne des pénalités calculées au taux légal en vigueur.<br>
+
+    <strong>Indemnité forfaitaire :</strong><br>
+    Une indemnité forfaitaire de 40€ sera due pour frais de recouvrement en cas de retard.
+</div>
+
         {{-- Pied de page --}}
         <div class="footer">
             Merci pour votre confiance.
 
-            @if(!empty($company?->name))
+            @if(!empty($company?->company_name) || !empty($company?->name))
                 <div style="margin-top: 6px;">
-                    Document émis par {{ $company->name }}.
+                    Document émis par {{ $company->company_name ?? $company->name }}.
                 </div>
             @endif
         </div>

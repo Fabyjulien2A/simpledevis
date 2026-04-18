@@ -18,35 +18,35 @@ class QuoteController extends Controller
      * Liste des devis
      */
     public function index(Request $request): View
-{
-    $query = Quote::where('user_id', auth()->id())
-        ->with('client', 'invoice');
+    {
+        $query = Quote::where('user_id', auth()->id())
+            ->with('client', 'invoice');
 
-    // Recherche
-    if ($request->filled('search')) {
-        $search = $request->search;
+        // Recherche
+        if ($request->filled('search')) {
+            $search = $request->search;
 
-        $query->where(function ($q) use ($search) {
-            $q->where('quote_number', 'like', "%{$search}%")
-              ->orWhere('total_ttc', 'like', "%{$search}%")
-              ->orWhereHas('client', function ($q2) use ($search) {
-                  $q2->where('first_name', 'like', "%{$search}%")
-                     ->orWhere('last_name', 'like', "%{$search}%")
-                     ->orWhere('email', 'like', "%{$search}%")
-                     ->orWhere('company_name', 'like', "%{$search}%");
-              });
-        });
+            $query->where(function ($q) use ($search) {
+                $q->where('quote_number', 'like', "%{$search}%")
+                  ->orWhere('total_ttc', 'like', "%{$search}%")
+                  ->orWhereHas('client', function ($q2) use ($search) {
+                      $q2->where('first_name', 'like', "%{$search}%")
+                         ->orWhere('last_name', 'like', "%{$search}%")
+                         ->orWhere('email', 'like', "%{$search}%")
+                         ->orWhere('company_name', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        // Filtre statut
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        $quotes = $query->latest()->paginate(10)->withQueryString();
+
+        return view('quotes.index', compact('quotes'));
     }
-
-    // Filtre statut
-    if ($request->filled('status')) {
-        $query->where('status', $request->status);
-    }
-
-    $quotes = $query->latest()->paginate(10)->withQueryString();
-
-    return view('quotes.index', compact('quotes'));
-}
 
     /**
      * Formulaire création devis
@@ -63,6 +63,19 @@ class QuoteController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        $user = auth()->user();
+
+        // 🔒 Limite plan gratuit
+        if (!$user->isSubscribed()) {
+            $quotesCount = $user->quotes()->count();
+
+            if ($quotesCount >= 10) {
+                return redirect()
+                    ->back()
+                    ->with('error', 'Tu as atteint la limite de 10 devis. Passe à une offre supérieure.');
+            }
+        }
+
         $validated = $request->validate([
             'client_id' => ['required', 'exists:clients,id'],
             'tva_rate' => ['required', 'numeric', 'in:0,10,20'],
@@ -84,10 +97,7 @@ class QuoteController extends Controller
                 ->withInput();
         }
 
-        $subtotalHt = $items->sum(function ($item) {
-            return $item['quantity'] * $item['price'];
-        });
-
+        $subtotalHt = $items->sum(fn($item) => $item['quantity'] * $item['price']);
         $tvaRate = (float) $validated['tva_rate'];
 
         $totalTva = $subtotalHt * ($tvaRate / 100);
@@ -138,7 +148,7 @@ class QuoteController extends Controller
     }
 
     /**
-     * Formulaire modification devis
+     * Modifier un devis
      */
     public function edit(Quote $quote): View
     {
@@ -150,7 +160,7 @@ class QuoteController extends Controller
     }
 
     /**
-     * Mettre à jour le devis
+     * Mettre à jour statut
      */
     public function update(Request $request, Quote $quote): RedirectResponse
     {
@@ -172,7 +182,7 @@ class QuoteController extends Controller
     }
 
     /**
-     * Générer le PDF du devis
+     * PDF
      */
     public function pdf(Quote $quote)
     {
@@ -189,81 +199,32 @@ class QuoteController extends Controller
         return $pdf->download('devis-' . $quote->quote_number . '.pdf');
     }
 
-
     /**
-     * Générer un duplicata du PDF du devis
+     * Dupliquer devis
      */
-
     public function duplicate(Quote $quote): RedirectResponse
-{
-    if ($quote->user_id !== auth()->id()) {
-        abort(403);
-    }
-
-    $quote->load('items');
-
-    $newQuote = Quote::create([
-        'user_id'      => auth()->id(),
-        'client_id'    => $quote->client_id,
-        'quote_number' => Quote::generateQuoteNumber(),
-        'date'         => now()->toDateString(),
-        'status'       => 'brouillon',
-        'subtotal_ht'  => $quote->subtotal_ht,
-        'total_tva'    => $quote->total_tva,
-        'total_ttc'    => $quote->total_ttc,
-        'notes'        => $quote->notes,
-    ]);
-
-    foreach ($quote->items as $item) {
-        QuoteItem::create([
-            'quote_id'      => $newQuote->id,
-            'description'   => $item->description,
-            'quantity'      => $item->quantity,
-            'unit_price_ht' => $item->unit_price_ht,
-            'tva_rate'      => $item->tva_rate,
-            'line_total_ht' => $item->line_total_ht,
-        ]);
-    }
-
-    return redirect()
-        ->route('quotes.show', $newQuote)
-        ->with('success', 'Le devis a bien été dupliqué.');
-}
-
-    /**
-     * Transformer un devis en facture
-     */
-    public function convertToInvoice(Quote $quote): RedirectResponse
     {
         if ($quote->user_id !== auth()->id()) {
             abort(403);
         }
 
-        if ($quote->invoice) {
-            return redirect()
-                ->route('quotes.show', $quote)
-                ->with('error', 'Ce devis a déjà été transformé en facture.');
-        }
-
         $quote->load('items');
 
-        $invoice = Invoice::create([
-            'user_id'        => $quote->user_id,
-            'client_id'      => $quote->client_id,
-            'quote_id'       => $quote->id,
-            'invoice_number' => Invoice::generateInvoiceNumber(),
-            'date'           => now()->toDateString(),
-            'status'         => 'non_payee',
-            'subtotal_ht'    => $quote->subtotal_ht,
-            'total_tva'      => $quote->total_tva,
-            'total_ttc'      => $quote->total_ttc,
-            'notes'          => $quote->notes,
-            'due_date' => now()->addDays(30),
+        $newQuote = Quote::create([
+            'user_id'      => auth()->id(),
+            'client_id'    => $quote->client_id,
+            'quote_number' => Quote::generateQuoteNumber(),
+            'date'         => now()->toDateString(),
+            'status'       => 'brouillon',
+            'subtotal_ht'  => $quote->subtotal_ht,
+            'total_tva'    => $quote->total_tva,
+            'total_ttc'    => $quote->total_ttc,
+            'notes'        => $quote->notes,
         ]);
 
         foreach ($quote->items as $item) {
-            InvoiceItem::create([
-                'invoice_id'    => $invoice->id,
+            QuoteItem::create([
+                'quote_id'      => $newQuote->id,
                 'description'   => $item->description,
                 'quantity'      => $item->quantity,
                 'unit_price_ht' => $item->unit_price_ht,
@@ -272,12 +233,70 @@ class QuoteController extends Controller
             ]);
         }
 
-        $quote->update([
-            'status' => 'accepte',
-        ]);
+        return redirect()
+            ->route('quotes.show', $newQuote)
+            ->with('success', 'Le devis a bien été dupliqué.');
+    }
 
+    /**
+     * Convertir en facture
+     */
+    public function convertToInvoice(Quote $quote): RedirectResponse
+{
+    if ($quote->user_id !== auth()->id()) {
+        abort(403);
+    }
+
+    $user = auth()->user();
+
+    // Limite plan gratuit
+    if (!$user->isSubscribed()) {
+        $invoicesCount = $user->invoices()->count();
+
+        if ($invoicesCount >= 10) {
+            return redirect()
+                ->route('quotes.show', $quote)
+                ->with('error', 'Tu as atteint la limite de 10 factures. Passe à une offre supérieure.');
+        }
+    }
+
+    if ($quote->invoice) {
         return redirect()
             ->route('quotes.show', $quote)
-            ->with('success', 'Le devis a été transformé en facture : ' . $invoice->invoice_number);
+            ->with('error', 'Déjà transformé en facture.');
     }
+
+    $quote->load('items');
+
+    $invoice = Invoice::create([
+        'user_id'        => $quote->user_id,
+        'client_id'      => $quote->client_id,
+        'quote_id'       => $quote->id,
+        'invoice_number' => Invoice::generateInvoiceNumber(),
+        'date'           => now()->toDateString(),
+        'status'         => 'non_payee',
+        'subtotal_ht'    => $quote->subtotal_ht,
+        'total_tva'      => $quote->total_tva,
+        'total_ttc'      => $quote->total_ttc,
+        'notes'          => $quote->notes,
+        'due_date'       => now()->addDays(30),
+    ]);
+
+    foreach ($quote->items as $item) {
+        InvoiceItem::create([
+            'invoice_id'    => $invoice->id,
+            'description'   => $item->description,
+            'quantity'      => $item->quantity,
+            'unit_price_ht' => $item->unit_price_ht,
+            'tva_rate'      => $item->tva_rate,
+            'line_total_ht' => $item->line_total_ht,
+        ]);
+    }
+
+    $quote->update(['status' => 'accepte']);
+
+    return redirect()
+        ->route('quotes.show', $quote)
+        ->with('success', 'Transformé en facture : ' . $invoice->invoice_number);
+}
 }

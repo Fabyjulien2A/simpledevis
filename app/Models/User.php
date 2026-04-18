@@ -8,16 +8,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Cashier\Billable;
 
-/**
- * Modèle utilisateur.
- *
- * Un utilisateur représente ici un artisan inscrit sur SimpleDevis.
- * Il possède une entreprise, des clients, des devis et des factures.
- */
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, Billable;
 
     /**
      * Les attributs assignables en masse.
@@ -41,28 +36,25 @@ class User extends Authenticatable
     ];
 
     /**
-     * Les conversions de types automatiques.
+     * Conversion automatique des types.
      *
-     * @return array<string, string>
+     * @var array<string, string>
      */
-    protected function casts(): array
-    {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-        ];
-    }
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'password' => 'hashed',
+    ];
 
     /**
-     * Un utilisateur possède une seule fiche entreprise.
+     * L'utilisateur possède une fiche entreprise.
      */
     public function company(): HasOne
     {
-        return $this->hasOne(CompanySetting::class);
+        return $this->hasOne(Company::class);
     }
 
     /**
-     * Un utilisateur possède plusieurs clients.
+     * L'utilisateur possède plusieurs clients.
      */
     public function clients(): HasMany
     {
@@ -70,7 +62,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Un utilisateur possède plusieurs devis.
+     * L'utilisateur possède plusieurs devis.
      */
     public function quotes(): HasMany
     {
@@ -78,10 +70,86 @@ class User extends Authenticatable
     }
 
     /**
-     * Un utilisateur possède plusieurs factures.
+     * L'utilisateur possède plusieurs factures.
      */
     public function invoices(): HasMany
     {
         return $this->hasMany(Invoice::class);
+    }
+
+    /**
+     * Vérifie si l'utilisateur a un abonnement actif.
+     */
+    public function isSubscribed(): bool
+    {
+        return $this->subscribed('default');
+    }
+
+    /**
+     * Libellé du plan affichable dans l'interface.
+     */
+    public function planLabel(): string
+    {
+        return $this->isSubscribed() ? 'Plan Pro' : 'Plan Gratuit';
+    }
+
+    /**
+     * Limite gratuite de devis.
+     */
+    public function freeQuotesLimit(): int
+    {
+        return 10;
+    }
+
+    /**
+     * Nombre de devis restants sur le plan gratuit.
+     */
+    public function remainingFreeQuotes(): int
+    {
+        if ($this->isSubscribed()) {
+            return 999999;
+        }
+
+        return max(0, $this->freeQuotesLimit() - $this->quotes()->count());
+    }
+
+    /**
+     * Limite gratuite de clients.
+     */
+    public function freeClientsLimit(): int
+    {
+        return 5;
+    }
+
+    /**
+     * Nombre de clients restants sur le plan gratuit.
+     */
+    public function remainingFreeClients(): int
+    {
+        if ($this->isSubscribed()) {
+            return 999999;
+        }
+
+        return max(0, $this->freeClientsLimit() - $this->clients()->count());
+    }
+
+    /**
+     * Limite gratuite de factures.
+     */
+    public function freeInvoicesLimit(): int
+    {
+        return 10;
+    }
+
+    /**
+     * Nombre de factures restantes sur le plan gratuit.
+     */
+    public function remainingFreeInvoices(): int
+    {
+        if ($this->isSubscribed()) {
+            return 999999;
+        }
+
+        return max(0, $this->freeInvoicesLimit() - $this->invoices()->count());
     }
 }

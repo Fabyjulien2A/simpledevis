@@ -43,6 +43,20 @@ class ClientController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+
+        $user = auth()->user();
+
+        // Limite plan gratuit
+        if (!$user->isSubscribed()) {
+            $clientsCount = $user->clients()->count();
+
+            if ($clientsCount >= 5) {
+                return redirect()
+                    ->back()
+                    ->with('error', 'Tu as atteint la limite de 5 clients. Passe à une offre supérieure.');
+            }
+        }
+
         // Validation des données du formulaire
         $validated = $request->validate([
             'company_name' => ['nullable', 'string', 'max:255'],
