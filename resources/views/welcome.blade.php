@@ -10,36 +10,40 @@
 
     {{-- NAV --}}
     <header class="sticky top-0 z-50 border-b border-slate-200/80 bg-white/80 backdrop-blur">
-        <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-            <a href="/" class="text-xl font-bold tracking-tight text-slate-900">
-                SimpleDevis
+    <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+        <a href="{{ url('/') }}" class="flex items-center">
+            <img
+                src="{{ asset('images/logo-1.png') }}"
+                alt="SimpleDevis"
+                class="h-24 w-auto"
+            >
+        </a>
+
+        <nav class="hidden items-center gap-8 md:flex">
+            <a href="{{ route('pricing') }}" class="text-sm font-medium text-slate-600 transition hover:text-slate-900">
+                Tarifs
             </a>
+            <a href="{{ route('login') }}" class="text-sm font-medium text-slate-600 transition hover:text-slate-900">
+                Connexion
+            </a>
+            <a
+                href="{{ route('register') }}"
+                class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+                S’inscrire
+            </a>
+        </nav>
 
-            <nav class="hidden items-center gap-8 md:flex">
-                <a href="{{ route('pricing') }}" class="text-sm font-medium text-slate-600 transition hover:text-slate-900">
-                    Tarifs
-                </a>
-                <a href="{{ route('login') }}" class="text-sm font-medium text-slate-600 transition hover:text-slate-900">
-                    Connexion
-                </a>
-                <a
-                    href="{{ route('register') }}"
-                    class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-                >
-                    S’inscrire
-                </a>
-            </nav>
-
-            <div class="md:hidden">
-                <a
-                    href="{{ route('register') }}"
-                    class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-                >
-                    S’inscrire
-                </a>
-            </div>
+        <div class="md:hidden">
+            <a
+                href="{{ route('register') }}"
+                class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+            >
+                S’inscrire
+            </a>
         </div>
-    </header>
+    </div>
+</header>
 
     {{-- HERO --}}
     <section class="relative overflow-hidden">

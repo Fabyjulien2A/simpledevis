@@ -11,6 +11,8 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use App\Mail\InvoiceMail;
 use Illuminate\Support\Facades\Mail;
 use App\Models\InvoiceItem;
+use App\Services\InvoiceXmlGenerator;
+use Symfony\Component\HttpFoundation\Response;
 
 class InvoiceController extends Controller
 {
@@ -153,6 +155,17 @@ class InvoiceController extends Controller
 
         $company = auth()->user()->company;
 
+        // 🔥 Préparation future facturation électronique
+        if ($invoice->is_electronic) {
+            // 👉 PLUS TARD :
+            // - Générer XML (Factur-X)
+            // - Envoyer à une PDP
+            // - Retourner un autre format
+
+            // Pour l’instant on garde le comportement normal
+        }
+
+        // PDF classique (actuel)
         $pdf = Pdf::loadView('invoices.pdf', compact('invoice', 'company'));
 
         return $pdf->download('facture-' . $invoice->invoice_number . '.pdf');
@@ -298,19 +311,21 @@ class InvoiceController extends Controller
 
         $invoice->load('items');
 
-        $newInvoice = Invoice::create([
-            'user_id'        => auth()->id(),
-            'client_id'      => $invoice->client_id,
-            'quote_id'       => null,
+        $invoice = Invoice::create([
+            'user_id'        => $quote->user_id,
+            'client_id'      => $quote->client_id,
+            'quote_id'       => $quote->id,
             'invoice_number' => Invoice::generateInvoiceNumber(),
             'date'           => now()->toDateString(),
-            'due_date'       => now()->addDays(30)->toDateString(),
             'status'         => 'non_payee',
-            'subtotal_ht'    => $invoice->subtotal_ht,
-            'total_tva'      => $invoice->total_tva,
-            'total_ttc'      => $invoice->total_ttc,
-            'amount_paid'    => 0,
-            'notes'          => $invoice->notes,
+            'subtotal_ht'    => $quote->subtotal_ht,
+            'total_tva'      => $quote->total_tva,
+            'total_ttc'      => $quote->total_ttc,
+            'notes'          => $quote->notes,
+            'due_date'       => now()->addDays(30),
+
+            // 🔥 AJOUT ICI
+            'is_electronic'  => false,
         ]);
 
         foreach ($invoice->items as $item) {
@@ -327,5 +342,21 @@ class InvoiceController extends Controller
         return redirect()
             ->route('invoices.show', $newInvoice)
             ->with('success', 'La facture a bien été dupliquée.');
+    }
+
+    /**
+     * Ajouter un paiement partiel
+     */
+    public function xml(Invoice $invoice, InvoiceXmlGenerator $xmlGenerator): Response
+    {
+        if ($invoice->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        $xmlContent = $xmlGenerator->generate($invoice);
+
+        return response($xmlContent, 200)
+            ->header('Content-Type', 'application/xml')
+            ->header('Content-Disposition', 'attachment; filename="facture-' . $invoice->invoice_number . '.xml"');
     }
 }

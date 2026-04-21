@@ -9,6 +9,10 @@ use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\SubscriptionController;
 
+
+Route::get('/invoices/{invoice}/xml', [InvoiceController::class, 'xml'])
+    ->name('invoices.xml');
+
 Route::get('/', function () {
     return view('welcome');
 });

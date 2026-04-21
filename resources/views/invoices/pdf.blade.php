@@ -387,15 +387,18 @@
 
         {{-- Conditions --}}
         <div class="notes">
-    <strong>Conditions de paiement :</strong><br>
-    Paiement à réception de facture.<br>
+            <strong>Conditions de paiement :</strong><br>
+            Paiement à réception de facture.<br>
 
-    <strong>Pénalités de retard :</strong>
-    Tout retard de paiement entraîne des pénalités calculées au taux légal en vigueur.<br>
+            <strong>Pénalités de retard :</strong><br>
+            10% du montant TTC.<br>
 
-    <strong>Indemnité forfaitaire :</strong><br>
-    Une indemnité forfaitaire de 40€ sera due pour frais de recouvrement en cas de retard.
-</div>
+            <strong>Indemnité forfaitaire :</strong><br>
+            Une indemnité forfaitaire de 40€ sera due pour frais de recouvrement en cas de retard.<br>
+
+            <strong>Escompte pour paiement anticipé :</strong><br>
+            Néant.
+        </div>
 
         {{-- Pied de page --}}
         <div class="footer">

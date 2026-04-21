@@ -4,422 +4,273 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tarifs - SimpleDevis</title>
-    <style>
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background: #f5f5f5;
-            color: #1f2937;
-        }
-
-        .header {
-            background: #ffffff;
-            border-bottom: 1px solid #e5e7eb;
-        }
-
-        .header-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 18px 24px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .logo {
-            font-size: 30px;
-            font-weight: 700;
-            text-decoration: none;
-            color: #111827;
-        }
-
-        .nav {
-            display: flex;
-            align-items: center;
-            gap: 18px;
-        }
-
-        .nav a {
-            text-decoration: none;
-            color: #4b5563;
-            font-size: 14px;
-        }
-
-        .nav a:hover {
-            color: #111827;
-        }
-
-        .btn-primary {
-            background: #2563eb;
-            color: white !important;
-            padding: 10px 16px;
-            border-radius: 10px;
-            font-weight: 600;
-        }
-
-        .btn-primary:hover {
-            background: #1d4ed8;
-        }
-
-        .main {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 60px 24px 90px;
-        }
-
-        .intro {
-            text-align: center;
-            margin-bottom: 50px;
-        }
-
-        .intro h1 {
-            margin: 0;
-            font-size: 32px;
-            font-weight: 700;
-        }
-
-        .intro p {
-            margin-top: 12px;
-            font-size: 16px;
-            color: #6b7280;
-        }
-
-        .pricing-grid {
-            display: flex;
-            justify-content: center;
-            gap: 40px;
-            align-items: stretch;
-            flex-wrap: wrap;
-        }
-
-        .pricing-card {
-            position: relative;
-            width: 320px;
-            min-height: 460px;
-            background: #ffffff;
-            border: 1px solid #d1d5db;
-            border-radius: 24px;
-            padding: 28px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }
-
-        .pricing-card.featured {
-            border: 2px solid #2563eb;
-            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.10);
-        }
-
-        .badge {
-            position: absolute;
-            top: -14px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #2563eb;
-            color: white;
-            font-size: 12px;
-            font-weight: 700;
-            padding: 7px 14px;
-            border-radius: 999px;
-        }
-
-        .card-title {
-            font-size: 30px;
-            font-weight: 700;
-            margin: 0;
-            text-align: center;
-        }
-
-        .card-subtitle {
-            text-align: center;
-            font-size: 14px;
-            color: #6b7280;
-            margin-top: 10px;
-            min-height: 38px;
-        }
-
-        .price {
-            text-align: center;
-            margin-top: 24px;
-        }
-
-        .price strong {
-            font-size: 44px;
-            color: #111827;
-        }
-
-        .price span {
-            font-size: 18px;
-            color: #6b7280;
-        }
-
-        .features {
-            margin-top: 28px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            font-size: 15px;
-            color: #374151;
-        }
-
-        .features div {
-            text-align: center;
-        }
-
-        .card-button {
-            margin-top: 34px;
-            display: inline-block;
-            text-align: center;
-            text-decoration: none;
-            padding: 14px 18px;
-            border-radius: 14px;
-            font-weight: 700;
-            font-size: 15px;
-        }
-
-        .card-button-outline {
-            border: 1px solid #d1d5db;
-            color: #111827;
-            background: #ffffff;
-        }
-
-        .card-button-outline:hover {
-            background: #f9fafb;
-        }
-
-        .card-button-filled {
-            background: #2563eb;
-            color: #ffffff;
-        }
-
-        .card-button-filled:hover {
-            background: #1d4ed8;
-        }
-
-        .faq-section {
-            margin-top: 100px;
-        }
-
-        .faq-title {
-            text-align: center;
-            font-size: 30px;
-            font-weight: 700;
-            margin-bottom: 36px;
-        }
-
-        .faq-list {
-            max-width: 900px;
-            margin: 0 auto;
-            display: flex;
-            flex-direction: column;
-            gap: 18px;
-        }
-
-        .faq-item {
-            background: white;
-            border: 1px solid #e5e7eb;
-            border-radius: 20px;
-            padding: 24px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
-        }
-
-        .faq-item h3 {
-            margin: 0;
-            font-size: 20px;
-        }
-
-        .faq-item p {
-            margin: 10px 0 0;
-            color: #6b7280;
-            line-height: 1.6;
-        }
-
-        @media (max-width: 1100px) {
-            .pricing-grid {
-                gap: 24px;
-            }
-
-            .pricing-card {
-                width: 300px;
-            }
-        }
-
-        @media (max-width: 768px) {
-            .header-container {
-                flex-direction: column;
-                gap: 14px;
-            }
-
-            .nav {
-                flex-wrap: wrap;
-                justify-content: center;
-            }
-
-            .intro h1 {
-                font-size: 28px;
-            }
-
-            .pricing-grid {
-                flex-direction: column;
-                align-items: center;
-            }
-
-            .pricing-card {
-                width: 100%;
-                max-width: 360px;
-                min-height: auto;
-            }
-
-            .faq-title {
-                font-size: 26px;
-            }
-        }
-    </style>
+    @vite(['resources/css/app.css'])
 </head>
-<body>
 
-    <header class="header">
-        <div class="header-container">
-            <a href="{{ url('/') }}" class="logo">SimpleDevis</a>
+<body class="bg-slate-50 text-slate-900 antialiased">
 
-            <nav class="nav">
-                <a href="{{ url('/') }}">Accueil</a>
-                <a href="{{ route('login') }}">Connexion</a>
-                <a href="{{ route('register') }}" class="btn-primary">S’inscrire</a>
+    <header class="sticky top-0 z-50 border-b border-slate-200/80 bg-white/80 backdrop-blur">
+        <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+<a href="/" class="flex items-center gap-2">
+    <img
+        src="{{ asset('images/logo-1.png') }}"
+        class="h-12 w-auto"
+        alt="SimpleDevis"
+    >
+</a>
+
+            <nav class="hidden items-center gap-6 md:flex">
+                <a href="{{ url('/') }}" class="text-sm font-medium text-slate-600 transition hover:text-slate-900">
+                    Accueil
+                </a>
+                <a href="{{ route('login') }}" class="text-sm font-medium text-slate-600 transition hover:text-slate-900">
+                    Connexion
+                </a>
+                <a href="{{ route('register') }}" class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
+                    S’inscrire
+                </a>
             </nav>
         </div>
     </header>
 
-    <main class="main">
-        <section class="intro">
-            <h1>Nos offres</h1>
-            <p>Choisis l’offre qui correspond à ton activité.</p>
-        </section>
+    <section class="relative overflow-hidden px-6 py-20 text-center">
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.10),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(15,23,42,0.05),transparent_35%)]"></div>
 
-        <section class="pricing-grid">
+        <div class="relative mx-auto max-w-4xl">
+            <span class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-4 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-blue-700">
+                Tarification simple
+            </span>
 
-    {{-- Découverte --}}
-    <div class="pricing-card">
-        <div>
-            <h2 class="card-title">Découverte</h2>
-            <p class="card-subtitle">Pour tester l’outil tranquillement</p>
+            <h1 class="mt-6 text-4xl font-bold tracking-tight text-slate-950 md:text-6xl">
+                Choisis l’offre adaptée à ton activité
+            </h1>
 
-            <div class="price">
-                <strong>0€</strong><span>/mois</span>
-            </div>
+            <p class="mx-auto mt-5 max-w-2xl text-lg leading-8 text-slate-600">
+                Commence gratuitement, teste l’outil à ton rythme et passe à l’offre Pro quand tu veux aller plus vite et gérer ton activité sans limite.
+            </p>
 
-            <div class="features">
-                <div>Jusqu’à 5 clients</div>
-                <div>Jusqu’à 10 devis</div>
-                <div>Jusqu’à 10 factures</div>
-                <div>PDF inclus</div>
-                <div>Support basique</div>
-            </div>
-        </div>
-
-        <a href="{{ route('register') }}" class="card-button card-button-outline">
-            Commencer
-        </a>
-    </div>
-
-    {{-- Pro --}}
-    <div class="pricing-card featured">
-        <div class="badge">Recommandé</div>
-
-        <div>
-            <h2 class="card-title">Pro</h2>
-            <p class="card-subtitle">Pour gérer ton activité sérieusement</p>
-
-            <div class="price">
-                <strong>12€</strong><span>/mois</span>
-            </div>
-
-            <div class="features">
-                <div>Clients illimités</div>
-                <div>Devis illimités</div>
-                <div>Factures illimitées</div>
-                <div>Suivi des paiements</div>
-                <div>Dashboard complet</div>
-                <div>PDF professionnels</div>
-                <div>Support prioritaire</div>
-            </div>
-        </div>
-
-        @auth
-            <form action="{{ route('billing.subscribe', 'pro') }}" method="POST">
-                @csrf
-                <button type="submit" class="card-button card-button-filled" style="width:100%; border:none; cursor:pointer;">
-                    Choisir Pro
-                </button>
-            </form>
-        @else
-            <a href="{{ route('register') }}" class="card-button card-button-filled">
-                Choisir Pro
-            </a>
-        @endauth
-    </div>
-
-    {{-- Business --}}
-    <div class="pricing-card">
-        <div>
-            <h2 class="card-title">Business</h2>
-            <p class="card-subtitle">Pour aller plus loin avec ton activité</p>
-
-            <div class="price">
-                <strong>29€</strong><span>/mois</span>
-            </div>
-
-            <div class="features">
-                <div>Tout dans l’offre Pro</div>
-                <div>Options avancées futures</div>
-                <div>Priorité sur les nouveautés</div>
-                <div>Assistance renforcée</div>
-                <div>Pensé pour une activité en croissance</div>
-            </div>
-        </div>
-
-        @auth
-            <form action="{{ route('billing.subscribe', 'business') }}" method="POST">
-                @csrf
-                <button type="submit" class="card-button card-button-outline" style="width:100%; cursor:pointer;">
-                    Choisir Business
-                </button>
-            </form>
-        @else
-            <a href="{{ route('register') }}" class="card-button card-button-outline">
-                Choisir Business
-            </a>
-        @endauth
-    </div>
-
-</section>
-
-        <section class="faq-section">
-            <h2 class="faq-title">Questions fréquentes</h2>
-
-            <div class="faq-list">
-                <div class="faq-item">
-                    <h3>Puis-je changer d’offre plus tard ?</h3>
-                    <p>Oui, tu pourras passer à une offre supérieure à tout moment.</p>
+            <div class="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500">
+                <div class="flex items-center gap-2">
+                    <span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+                    Sans engagement
                 </div>
-
-                <div class="faq-item">
-                    <h3>Y a-t-il un engagement ?</h3>
-                    <p>Non, les offres sont pensées pour rester simples et flexibles.</p>
+                <div class="flex items-center gap-2">
+                    <span class="h-2.5 w-2.5 rounded-full bg-blue-500"></span>
+                    Activation immédiate
                 </div>
-
-                <div class="faq-item">
-                    <h3>La formule gratuite suffit-elle pour tester ?</h3>
-                    <p>Oui, elle est là pour découvrir l’outil avant de passer à une formule plus complète.</p>
+                <div class="flex items-center gap-2">
+                    <span class="h-2.5 w-2.5 rounded-full bg-violet-500"></span>
+                    Pensé pour les indépendants
                 </div>
             </div>
-        </section>
-    </main>
+        </div>
+    </section>
+
+    <section class="mx-auto max-w-6xl px-6 pb-20">
+        <div class="grid gap-8 lg:grid-cols-3">
+
+            <div class="flex flex-col justify-between rounded-3xl border border-slate-200 bg-white p-8 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-xl">
+                <div>
+                    <h2 class="text-center text-2xl font-semibold text-slate-900">
+                        Découverte
+                    </h2>
+                    <p class="mt-2 text-center text-sm text-slate-500">
+                        Pour tester l’outil tranquillement
+                    </p>
+
+                    <div class="mt-8 text-center">
+                        <span class="text-5xl font-bold tracking-tight text-slate-950">0€</span>
+                        <span class="text-lg text-slate-500">/mois</span>
+                    </div>
+
+                    <p class="mt-3 text-center text-sm font-medium text-slate-500">
+                        Idéal pour découvrir SimpleDevis
+                    </p>
+
+                    <ul class="mt-8 space-y-4 text-sm text-slate-600">
+                        <li class="flex items-center justify-center gap-2">
+                            <span class="text-emerald-500">✓</span> Jusqu’à 5 clients
+                        </li>
+                        <li class="flex items-center justify-center gap-2">
+                            <span class="text-emerald-500">✓</span> Jusqu’à 10 devis
+                        </li>
+                        <li class="flex items-center justify-center gap-2">
+                            <span class="text-emerald-500">✓</span> Jusqu’à 10 factures
+                        </li>
+                        <li class="flex items-center justify-center gap-2">
+                            <span class="text-emerald-500">✓</span> PDF inclus
+                        </li>
+                        <li class="flex items-center justify-center gap-2">
+                            <span class="text-emerald-500">✓</span> Support basique
+                        </li>
+                    </ul>
+                </div>
+
+                <a
+                    href="{{ route('register') }}"
+                    class="mt-10 rounded-2xl border border-slate-200 py-3 text-center text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+                >
+                    Commencer gratuitement
+                </a>
+            </div>
+
+            <div class="relative flex flex-col justify-between rounded-3xl border-2 border-blue-600 bg-gradient-to-b from-white to-blue-50 p-8 shadow-xl shadow-blue-600/10 transition duration-200 hover:-translate-y-1 hover:shadow-2xl">
+                <div class="absolute -top-4 left-1/2 -translate-x-1/2">
+                    <span class="rounded-full bg-blue-600 px-4 py-1 text-xs font-semibold text-white shadow-md">
+                        Recommandé
+                    </span>
+                </div>
+
+                <div>
+                    <h2 class="text-center text-2xl font-semibold text-slate-900">
+                        Pro
+                    </h2>
+                    <p class="mt-2 text-center text-sm text-slate-500">
+                        Pour gérer ton activité sérieusement
+                    </p>
+
+                    <div class="mt-8 text-center">
+                        <span class="text-5xl font-bold tracking-tight text-slate-950">12€</span>
+                        <span class="text-lg text-slate-500">/mois</span>
+                    </div>
+
+                    <p class="mt-3 text-center text-sm font-semibold text-blue-700">
+                        Le plus choisi par les indépendants 🚀
+                    </p>
+
+                    <ul class="mt-8 space-y-4 text-sm text-slate-700">
+                        <li class="flex items-center justify-center gap-2">
+                            <span class="text-blue-600">✓</span> Clients illimités
+                        </li>
+                        <li class="flex items-center justify-center gap-2">
+                            <span class="text-blue-600">✓</span> Devis illimités
+                        </li>
+                        <li class="flex items-center justify-center gap-2">
+                            <span class="text-blue-600">✓</span> Factures illimitées
+                        </li>
+                        <li class="flex items-center justify-center gap-2">
+                            <span class="text-blue-600">✓</span> Suivi des paiements
+                        </li>
+                        <li class="flex items-center justify-center gap-2">
+                            <span class="text-blue-600">✓</span> Dashboard complet
+                        </li>
+                        <li class="flex items-center justify-center gap-2">
+                            <span class="text-blue-600">✓</span> PDF professionnels
+                        </li>
+                        <li class="flex items-center justify-center gap-2">
+                            <span class="text-blue-600">✓</span> Support prioritaire
+                        </li>
+                    </ul>
+                </div>
+
+                @auth
+                    <form action="{{ route('billing.subscribe', 'pro') }}" method="POST">
+                        @csrf
+                        <button
+                            type="submit"
+                            class="mt-10 w-full rounded-2xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/30 transition hover:bg-blue-700"
+                        >
+                            Choisir Pro
+                        </button>
+                    </form>
+                @else
+                    <a
+                        href="{{ route('register') }}"
+                        class="mt-10 rounded-2xl bg-blue-600 py-3 text-center text-sm font-semibold text-white shadow-lg shadow-blue-600/30 transition hover:bg-blue-700"
+                    >
+                        Choisir Pro
+                    </a>
+                @endauth
+            </div>
+
+            <div class="flex flex-col justify-between rounded-3xl border border-slate-200 bg-white p-8 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-xl">
+                <div>
+                    <h2 class="text-center text-2xl font-semibold text-slate-900">
+                        Business
+                    </h2>
+                    <p class="mt-2 text-center text-sm text-slate-500">
+                        Pour aller plus loin avec ton activité
+                    </p>
+
+                    <div class="mt-8 text-center">
+                        <span class="text-5xl font-bold tracking-tight text-slate-950">29€</span>
+                        <span class="text-lg text-slate-500">/mois</span>
+                    </div>
+
+                    <p class="mt-3 text-center text-sm font-medium text-slate-500">
+                        Pour une activité en croissance
+                    </p>
+
+                    <ul class="mt-8 space-y-4 text-sm text-slate-600">
+                        <li class="flex items-center justify-center gap-2">
+                            <span class="text-emerald-500">✓</span> Tout dans l’offre Pro
+                        </li>
+                        <li class="flex items-center justify-center gap-2">
+                            <span class="text-emerald-500">✓</span> Fonctionnalités avancées
+                        </li>
+                        <li class="flex items-center justify-center gap-2">
+                            <span class="text-emerald-500">✓</span> Priorité sur les nouveautés
+                        </li>
+                        <li class="flex items-center justify-center gap-2">
+                            <span class="text-emerald-500">✓</span> Assistance renforcée
+                        </li>
+                        <li class="flex items-center justify-center gap-2">
+                            <span class="text-emerald-500">✓</span> Pensé pour une activité en croissance
+                        </li>
+                    </ul>
+                </div>
+
+                @auth
+                    <form action="{{ route('billing.subscribe', 'business') }}" method="POST">
+                        @csrf
+                        <button
+                            type="submit"
+                            class="mt-10 w-full rounded-2xl border border-slate-200 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+                        >
+                            Choisir Business
+                        </button>
+                    </form>
+                @else
+                    <a
+                        href="{{ route('register') }}"
+                        class="mt-10 rounded-2xl border border-slate-200 py-3 text-center text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+                    >
+                        Choisir Business
+                    </a>
+                @endauth
+            </div>
+
+        </div>
+    </section>
+
+    <section class="mx-auto max-w-4xl px-6 pb-24">
+        <h2 class="mb-10 text-center text-3xl font-bold tracking-tight text-slate-950">
+            Questions fréquentes
+        </h2>
+
+        <div class="space-y-6">
+            <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 class="font-semibold text-slate-900">Puis-je changer d’offre plus tard ?</h3>
+                <p class="mt-2 text-slate-500">
+                    Oui, tu pourras passer à une offre supérieure à tout moment selon l’évolution de ton activité.
+                </p>
+            </div>
+
+            <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 class="font-semibold text-slate-900">Y a-t-il un engagement ?</h3>
+                <p class="mt-2 text-slate-500">
+                    Non, les offres sont simples, flexibles et sans engagement.
+                </p>
+            </div>
+
+            <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 class="font-semibold text-slate-900">La formule gratuite suffit-elle pour tester ?</h3>
+                <p class="mt-2 text-slate-500">
+                    Oui, elle est idéale pour découvrir l’outil avant de passer à une formule plus complète.
+                </p>
+            </div>
+        </div>
+    </section>
 
 </body>
 </html>

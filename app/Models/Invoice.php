@@ -32,6 +32,9 @@ class Invoice extends Model
         'total_tva',
         'total_ttc',
         'notes',
+        'is_electronic',
+        'pdp_id',
+        'pdp_status',
     ];
 
     /**
