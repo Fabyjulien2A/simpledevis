@@ -9,39 +9,32 @@
 <body class="bg-slate-50 text-slate-900 antialiased">
 
     {{-- NAV --}}
-    <header class="sticky top-0 z-50 border-b border-slate-200/80 bg-white/80 backdrop-blur">
-    <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        <a href="{{ url('/') }}" class="flex items-center">
+    <header class="sticky top-0 z-50 border-b border-slate-200/80 bg-white/90 backdrop-blur">
+    <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
+        <a href="{{ url('/') }}" class="flex items-center gap-2 shrink-0">
             <img
-                src="{{ asset('images/logo-1.png') }}"
-                alt="SimpleDevis"
-                class="h-20 w-auto"
-            >
+    src="{{ asset('images/logo-1.png') }}"
+    alt="SimpleDevis"
+    class="h-16 sm:h-20 lg:h-24 w-auto object-contain"
+/>
         </a>
 
-        <nav class="hidden items-center gap-8 md:flex">
-            <a href="{{ route('pricing') }}" class="text-sm font-medium text-slate-600 transition hover:text-slate-900">
+        <nav class="flex items-center gap-2 sm:gap-4">
+            <a href="{{ route('pricing') }}"
+               class="hidden text-sm font-medium text-slate-600 transition hover:text-slate-900 sm:inline-flex">
                 Tarifs
             </a>
-            <a href="{{ route('login') }}" class="text-sm font-medium text-slate-600 transition hover:text-slate-900">
+
+            <a href="{{ route('login') }}"
+               class="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
                 Connexion
             </a>
-            <a
-                href="{{ route('register') }}"
-                class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-            >
+
+            <a href="{{ route('register') }}"
+               class="inline-flex items-center justify-center rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 sm:px-4">
                 S’inscrire
             </a>
         </nav>
-
-        <div class="md:hidden">
-            <a
-                href="{{ route('register') }}"
-                class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-            >
-                S’inscrire
-            </a>
-        </div>
     </div>
 </header>
 
@@ -257,6 +250,32 @@
             </div>
         </div>
     </section>
+
+    {{-- FOOTER (AJOUT IMPORTANT) --}}
+<footer class="border-t border-slate-200 bg-white">
+    <div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-6 py-6 text-sm text-slate-500 md:flex-row">
+
+        <p>
+            © {{ date('Y') }} SimpleDevis - Tous droits réservés
+        </p>
+
+        <div class="flex flex-wrap items-center justify-center gap-4">
+            <a href="{{ route('legal.mentions') }}" class="hover:text-slate-900">
+                Mentions légales
+            </a>
+
+            <a href="{{ route('legal.confidentialite') }}" class="hover:text-slate-900">
+                Confidentialité
+            </a>
+
+            <a href="{{ route('legal.cgv') }}" class="hover:text-slate-900">
+                CGV
+            </a>
+        </div>
+
+    </div>
+</footer>
+
 
 </body>
 </html>

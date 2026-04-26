@@ -170,4 +170,30 @@
             </div>
         </div>
     </div>
+
+        {{-- FOOTER (AJOUT IMPORTANT) --}}
+<footer class="border-t border-slate-200 bg-white">
+    <div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-6 py-6 text-sm text-slate-500 md:flex-row">
+
+        <p>
+            © {{ date('Y') }} SimpleDevis - Tous droits réservés
+        </p>
+
+        <div class="flex flex-wrap items-center justify-center gap-4">
+            <a href="{{ route('legal.mentions') }}" class="hover:text-slate-900">
+                Mentions légales
+            </a>
+
+            <a href="{{ route('legal.confidentialite') }}" class="hover:text-slate-900">
+                Confidentialité
+            </a>
+
+            <a href="{{ route('legal.cgv') }}" class="hover:text-slate-900">
+                CGV
+            </a>
+        </div>
+
+    </div>
+</footer>
+
 </x-guest-layout>

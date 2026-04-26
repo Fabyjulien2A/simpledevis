@@ -17,6 +17,10 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+Route::view('/mentions-legales', 'legal.mentions')->name('legal.mentions');
+Route::view('/confidentialite', 'legal.confidentialite')->name('legal.confidentialite');
+Route::view('/cgv', 'legal.cgv')->name('legal.cgv');
+
 Route::post('/billing/portal', [App\Http\Controllers\BillingController::class, 'portal'])
     ->middleware(['auth'])
     ->name('billing.portal');
