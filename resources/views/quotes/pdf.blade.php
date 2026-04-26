@@ -46,10 +46,14 @@
         }
 
         .document-title {
-            font-size: 26px;
+            font-size: 28px;
             font-weight: bold;
             margin-bottom: 8px;
-            letter-spacing: 1px;
+            letter-spacing: 2px;
+        }
+
+        .muted {
+            color: #666;
         }
 
         .section {
@@ -78,6 +82,7 @@
             border: 1px solid #dcdcdc;
             padding: 12px;
             border-radius: 4px;
+            line-height: 1.6;
         }
 
         .items-table {
@@ -110,7 +115,7 @@
         }
 
         .totals-table {
-            width: 320px;
+            width: 340px;
             margin-left: auto;
             border-collapse: collapse;
         }
@@ -126,7 +131,7 @@
 
         .totals-table .value {
             text-align: right;
-            width: 120px;
+            width: 140px;
         }
 
         .grand-total td {
@@ -141,43 +146,52 @@
             margin-top: 25px;
             font-size: 11px;
             color: #444;
+            line-height: 1.7;
         }
 
-        .signature {
-            margin-top: 50px;
-            width: 100%;
+        .approval-box {
+            margin-top: 35px;
+            border: 1px solid #dcdcdc;
+            padding: 16px;
+            border-radius: 4px;
         }
 
-        .signature-table {
-            width: 100%;
-            border-collapse: collapse;
+        .approval-title {
+            font-weight: bold;
+            margin-bottom: 10px;
         }
 
-        .signature-table td {
-            width: 50%;
-            vertical-align: top;
-            padding-top: 20px;
-        }
-
-        .signature-box {
-            border-top: 1px solid #999;
-            padding-top: 8px;
-            width: 220px;
-            color: #555;
-            font-size: 11px;
+        .signature-space {
+            margin-top: 35px;
         }
 
         .footer {
-            margin-top: 40px;
+            margin-top: 35px;
             font-size: 11px;
             color: #666;
             border-top: 1px solid #dcdcdc;
             padding-top: 15px;
+            line-height: 1.6;
         }
     </style>
 </head>
 <body>
     <div class="document">
+
+        @php
+            $companyName = $company->company_name ?? $company->name ?? auth()->user()->name;
+
+            $statusLabel = match ($quote->status) {
+                'brouillon' => 'Brouillon',
+                'envoye' => 'Envoyé',
+                'accepte' => 'Accepté',
+                'refuse' => 'Refusé',
+                default => ucfirst($quote->status),
+            };
+
+            $tvaRate = $quote->items->first()?->tva_rate ?? 0;
+            $quoteValidity = $company->quote_validity ?? '30 jours';
+        @endphp
 
         {{-- En-tête --}}
         <div class="header">
@@ -189,17 +203,19 @@
                         @endif
 
                         <div style="font-size: 16px; font-weight: bold; margin-bottom: 6px;">
-                            {{ $company->company_name ?? $company->name ?? auth()->user()->name }}
+                            {{ $companyName }}
                         </div>
+
+                        @if(!empty($company?->legal_status))
+                            <div>{{ $company->legal_status }}</div>
+                        @endif
 
                         @if(!empty($company?->address))
                             <div>{{ $company->address }}</div>
                         @endif
 
                         @if(!empty($company?->postal_code) || !empty($company?->city))
-                            <div>
-                                {{ $company->postal_code ?? '' }} {{ $company->city ?? '' }}
-                            </div>
+                            <div>{{ $company->postal_code ?? '' }} {{ $company->city ?? '' }}</div>
                         @endif
 
                         @if(!empty($company?->email))
@@ -214,8 +230,8 @@
                             <div>SIRET : {{ $company->siret }}</div>
                         @endif
 
-                        @if(!empty($company?->tva_number))
-                            <div>TVA : {{ $company->tva_number }}</div>
+                        @if(!empty($company?->vat_number))
+                            <div>TVA intracommunautaire : {{ $company->vat_number }}</div>
                         @endif
                     </td>
 
@@ -223,20 +239,10 @@
                         <div class="document-title">DEVIS</div>
                         <div><strong>Numéro :</strong> {{ $quote->quote_number }}</div>
                         <div><strong>Date :</strong> {{ $quote->date->format('d/m/Y') }}</div>
-                        <div><strong>Validité :</strong> 30 jours</div>
+                        <div><strong>Validité :</strong> {{ $quoteValidity }}</div>
 
                         <div style="margin-top: 8px;">
-                            <strong>Statut :</strong>
-                            @php
-                                $statusLabel = match ($quote->status) {
-                                    'brouillon' => 'Brouillon',
-                                    'envoye' => 'Envoyé',
-                                    'accepte' => 'Accepté',
-                                    'refuse' => 'Refusé',
-                                    default => ucfirst($quote->status),
-                                };
-                            @endphp
-                            {{ $statusLabel }}
+                            <strong>Statut :</strong> {{ $statusLabel }}
                         </div>
                     </td>
                 </tr>
@@ -248,33 +254,6 @@
             <table class="info-table">
                 <tr>
                     <td style="padding-right: 10px;">
-                        <div class="box-title">Émetteur</div>
-                        <div class="box">
-                            <div style="font-weight: bold; margin-bottom: 4px;">
-                                {{ $company->company_name ?? $company->name ?? auth()->user()->name }}
-                            </div>
-
-                            @if(!empty($company?->address))
-                                <div>{{ $company->address }}</div>
-                            @endif
-
-                            @if(!empty($company?->postal_code) || !empty($company?->city))
-                                <div>
-                                    {{ $company->postal_code ?? '' }} {{ $company->city ?? '' }}
-                                </div>
-                            @endif
-
-                            @if(!empty($company?->email))
-                                <div>{{ $company->email }}</div>
-                            @endif
-
-                            @if(!empty($company?->phone))
-                                <div>{{ $company->phone }}</div>
-                            @endif
-                        </div>
-                    </td>
-
-                    <td style="padding-left: 10px;">
                         <div class="box-title">Client</div>
                         <div class="box">
                             <div style="font-weight: bold; margin-bottom: 4px;">
@@ -290,9 +269,7 @@
                             @endif
 
                             @if(!empty($quote->client->postal_code) || !empty($quote->client->city))
-                                <div>
-                                    {{ $quote->client->postal_code ?? '' }} {{ $quote->client->city ?? '' }}
-                                </div>
+                                <div>{{ $quote->client->postal_code ?? '' }} {{ $quote->client->city ?? '' }}</div>
                             @endif
 
                             @if(!empty($quote->client->email))
@@ -304,11 +281,23 @@
                             @endif
                         </div>
                     </td>
+
+                    <td style="padding-left: 10px;">
+                        <div class="box-title">Informations</div>
+                        <div class="box">
+                            <div><strong>Devise :</strong> EUR</div>
+                            <div><strong>Validité du devis :</strong> {{ $quoteValidity }}</div>
+
+                            @if(!empty($company?->payment_terms))
+                                <div><strong>Conditions de paiement :</strong> {{ $company->payment_terms }}</div>
+                            @endif
+                        </div>
+                    </td>
                 </tr>
             </table>
         </div>
 
-        {{-- Tableau --}}
+        {{-- Tableau des lignes --}}
         <div class="section">
             <table class="items-table">
                 <thead>
@@ -316,6 +305,7 @@
                         <th>Description</th>
                         <th class="text-right">Qté</th>
                         <th class="text-right">Prix unitaire HT</th>
+                        <th class="text-right">TVA</th>
                         <th class="text-right">Total HT</th>
                     </tr>
                 </thead>
@@ -323,13 +313,14 @@
                     @forelse($quote->items as $item)
                         <tr>
                             <td>{{ $item->description }}</td>
-                            <td class="text-right">{{ number_format($item->quantity, 2) }}</td>
-                            <td class="text-right">{{ number_format($item->unit_price_ht, 2) }} €</td>
-                            <td class="text-right">{{ number_format($item->line_total_ht, 2) }} €</td>
+                            <td class="text-right">{{ number_format($item->quantity, 2, ',', ' ') }}</td>
+                            <td class="text-right">{{ number_format($item->unit_price_ht, 2, ',', ' ') }} €</td>
+                            <td class="text-right">{{ number_format($item->tva_rate, 2, ',', ' ') }} %</td>
+                            <td class="text-right">{{ number_format($item->line_total_ht, 2, ',', ' ') }} €</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="4">Aucune ligne de devis.</td>
+                            <td colspan="5" class="muted">Aucune ligne de devis.</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -338,22 +329,18 @@
 
         {{-- Totaux --}}
         <div class="totals-wrapper">
-            @php
-                $tvaRate = $quote->items->first()?->tva_rate ?? 0;
-            @endphp
-
             <table class="totals-table">
                 <tr>
                     <td class="label">Total HT</td>
-                    <td class="value">{{ number_format($quote->subtotal_ht, 2) }} €</td>
+                    <td class="value">{{ number_format($quote->subtotal_ht, 2, ',', ' ') }} €</td>
                 </tr>
                 <tr>
-                    <td class="label">TVA ({{ number_format($tvaRate, 0) }} %)</td>
-                    <td class="value">{{ number_format($quote->total_tva, 2) }} €</td>
+                    <td class="label">TVA ({{ number_format($tvaRate, 2, ',', ' ') }} %)</td>
+                    <td class="value">{{ number_format($quote->total_tva, 2, ',', ' ') }} €</td>
                 </tr>
                 <tr class="grand-total">
                     <td class="label">Total TTC</td>
-                    <td class="value">{{ number_format($quote->total_ttc, 2) }} €</td>
+                    <td class="value">{{ number_format($quote->total_ttc, 2, ',', ' ') }} €</td>
                 </tr>
             </table>
         </div>
@@ -366,27 +353,37 @@
             </div>
         @endif
 
-        {{-- Signature --}}
-        <div class="signature">
-            <table class="signature-table">
-                <tr>
-                    <td>
-                        <div class="signature-box">
-                            Signature de l’émetteur
-                        </div>
-                    </td>
-                    <td style="text-align: right;">
-                        <div class="signature-box" style="margin-left: auto;">
-                            Bon pour accord, signature du client
-                        </div>
-                    </td>
-                </tr>
-            </table>
+        {{-- Mentions devis --}}
+        <div class="notes">
+            <strong>Validité du devis :</strong><br>
+            Ce devis est valable {{ $quoteValidity }} à compter de sa date d’émission.<br><br>
+
+            @if(!empty($company?->payment_terms))
+                <strong>Conditions de paiement :</strong><br>
+                {{ $company->payment_terms }}<br><br>
+            @endif
+
+            <strong>Acceptation du devis :</strong><br>
+            La signature de ce devis précédée de la mention « Bon pour accord » vaut acceptation pleine et entière de la prestation et des conditions indiquées.
         </div>
 
-        {{-- Footer --}}
+        {{-- Bon pour accord --}}
+        <div class="approval-box">
+            <div class="approval-title">Bon pour accord</div>
+            <div>Nom du client : ____________________________________________</div>
+            <div class="signature-space">Date : ____________________</div>
+            <div class="signature-space">Signature : ______________________________</div>
+        </div>
+
+        {{-- Pied de page --}}
         <div class="footer">
             Merci pour votre confiance.
+
+            @if(!empty($company?->company_name) || !empty($company?->name))
+                <div style="margin-top: 6px;">
+                    Document émis par {{ $companyName }}.
+                </div>
+            @endif
         </div>
     </div>
 </body>

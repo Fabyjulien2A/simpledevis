@@ -32,9 +32,15 @@ class Invoice extends Model
         'total_tva',
         'total_ttc',
         'notes',
+
+        // Facturation électronique / préparation réforme
         'is_electronic',
+        'electronic_format',
         'pdp_id',
+        'pdp_reference',
         'pdp_status',
+        'xml_generated_at',
+        'sent_to_pdp_at',
     ];
 
     /**
@@ -49,6 +55,11 @@ class Invoice extends Model
         'total_tva' => 'decimal:2',
         'total_ttc' => 'decimal:2',
         'amount_paid' => 'decimal:2',
+
+        // Facturation électronique
+        'is_electronic' => 'boolean',
+        'xml_generated_at' => 'datetime',
+        'sent_to_pdp_at' => 'datetime',
     ];
 
     /**
@@ -128,6 +139,43 @@ class Invoice extends Model
             'payee' => 'Payée',
             default => ucfirst($this->status),
         };
+    }
+
+    /**
+     * Libellé lisible du statut e-facturation.
+     */
+    public function getPdpStatusLabelAttribute(): string
+    {
+        return match ($this->pdp_status) {
+            'draft' => 'Brouillon',
+            'generated' => 'XML généré',
+            'ready' => 'Prête à envoyer',
+            'sent' => 'Envoyée',
+            'accepted' => 'Acceptée',
+            'rejected' => 'Rejetée',
+            default => 'Non préparée',
+        };
+    }
+
+    /**
+     * Indique si un XML a déjà été généré.
+     */
+    public function getHasGeneratedXmlAttribute(): bool
+    {
+        return !empty($this->xml_generated_at);
+    }
+
+    /**
+     * Marque la facture comme préparée en XML.
+     */
+    public function markXmlGenerated(): void
+    {
+        $this->update([
+            'is_electronic' => true,
+            'electronic_format' => 'xml',
+            'pdp_status' => 'generated',
+            'xml_generated_at' => now(),
+        ]);
     }
 
     /**

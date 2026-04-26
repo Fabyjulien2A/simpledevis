@@ -11,13 +11,13 @@
 
     <header class="sticky top-0 z-50 border-b border-slate-200/80 bg-white/80 backdrop-blur">
         <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-<a href="/" class="flex items-center gap-2">
-    <img
-        src="{{ asset('images/logo-1.png') }}"
-        class="h-12 w-auto"
-        alt="SimpleDevis"
-    >
-</a>
+            <a href="/" class="flex items-center gap-2">
+                <img
+                    src="{{ asset('images/logo-1.png') }}"
+                    class="h-24 w-auto"
+                    alt="SimpleDevis"
+                >
+            </a>
 
             <nav class="hidden items-center gap-6 md:flex">
                 <a href="{{ url('/') }}" class="text-sm font-medium text-slate-600 transition hover:text-slate-900">
@@ -66,9 +66,10 @@
         </div>
     </section>
 
-    <section class="mx-auto max-w-6xl px-6 pb-20">
-        <div class="grid gap-8 lg:grid-cols-3">
+    <section class="mx-auto max-w-5xl px-6 pb-20">
+        <div class="grid gap-8 lg:grid-cols-2">
 
+            <!-- Découverte -->
             <div class="flex flex-col justify-between rounded-3xl border border-slate-200 bg-white p-8 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-xl">
                 <div>
                     <h2 class="text-center text-2xl font-semibold text-slate-900">
@@ -114,6 +115,7 @@
                 </a>
             </div>
 
+            <!-- Pro -->
             <div class="relative flex flex-col justify-between rounded-3xl border-2 border-blue-600 bg-gradient-to-b from-white to-blue-50 p-8 shadow-xl shadow-blue-600/10 transition duration-200 hover:-translate-y-1 hover:shadow-2xl">
                 <div class="absolute -top-4 left-1/2 -translate-x-1/2">
                     <span class="rounded-full bg-blue-600 px-4 py-1 text-xs font-semibold text-white shadow-md">
@@ -170,72 +172,15 @@
                             type="submit"
                             class="mt-10 w-full rounded-2xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/30 transition hover:bg-blue-700"
                         >
-                            Choisir Pro
+                            Passer en Pro
                         </button>
                     </form>
                 @else
                     <a
-                        href="{{ route('register') }}"
+                        href="{{ route('register', ['plan' => 'pro']) }}"
                         class="mt-10 rounded-2xl bg-blue-600 py-3 text-center text-sm font-semibold text-white shadow-lg shadow-blue-600/30 transition hover:bg-blue-700"
                     >
-                        Choisir Pro
-                    </a>
-                @endauth
-            </div>
-
-            <div class="flex flex-col justify-between rounded-3xl border border-slate-200 bg-white p-8 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-xl">
-                <div>
-                    <h2 class="text-center text-2xl font-semibold text-slate-900">
-                        Business
-                    </h2>
-                    <p class="mt-2 text-center text-sm text-slate-500">
-                        Pour aller plus loin avec ton activité
-                    </p>
-
-                    <div class="mt-8 text-center">
-                        <span class="text-5xl font-bold tracking-tight text-slate-950">29€</span>
-                        <span class="text-lg text-slate-500">/mois</span>
-                    </div>
-
-                    <p class="mt-3 text-center text-sm font-medium text-slate-500">
-                        Pour une activité en croissance
-                    </p>
-
-                    <ul class="mt-8 space-y-4 text-sm text-slate-600">
-                        <li class="flex items-center justify-center gap-2">
-                            <span class="text-emerald-500">✓</span> Tout dans l’offre Pro
-                        </li>
-                        <li class="flex items-center justify-center gap-2">
-                            <span class="text-emerald-500">✓</span> Fonctionnalités avancées
-                        </li>
-                        <li class="flex items-center justify-center gap-2">
-                            <span class="text-emerald-500">✓</span> Priorité sur les nouveautés
-                        </li>
-                        <li class="flex items-center justify-center gap-2">
-                            <span class="text-emerald-500">✓</span> Assistance renforcée
-                        </li>
-                        <li class="flex items-center justify-center gap-2">
-                            <span class="text-emerald-500">✓</span> Pensé pour une activité en croissance
-                        </li>
-                    </ul>
-                </div>
-
-                @auth
-                    <form action="{{ route('billing.subscribe', 'business') }}" method="POST">
-                        @csrf
-                        <button
-                            type="submit"
-                            class="mt-10 w-full rounded-2xl border border-slate-200 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
-                        >
-                            Choisir Business
-                        </button>
-                    </form>
-                @else
-                    <a
-                        href="{{ route('register') }}"
-                        class="mt-10 rounded-2xl border border-slate-200 py-3 text-center text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
-                    >
-                        Choisir Business
+                        Passer en Pro
                     </a>
                 @endauth
             </div>
@@ -252,21 +197,21 @@
             <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h3 class="font-semibold text-slate-900">Puis-je changer d’offre plus tard ?</h3>
                 <p class="mt-2 text-slate-500">
-                    Oui, tu pourras passer à une offre supérieure à tout moment selon l’évolution de ton activité.
+                    Oui, tu peux passer au plan Pro à tout moment selon l’évolution de ton activité.
                 </p>
             </div>
 
             <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h3 class="font-semibold text-slate-900">Y a-t-il un engagement ?</h3>
                 <p class="mt-2 text-slate-500">
-                    Non, les offres sont simples, flexibles et sans engagement.
+                    Non, l’offre Pro est simple, flexible et sans engagement.
                 </p>
             </div>
 
             <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <h3 class="font-semibold text-slate-900">La formule gratuite suffit-elle pour tester ?</h3>
                 <p class="mt-2 text-slate-500">
-                    Oui, elle est idéale pour découvrir l’outil avant de passer à une formule plus complète.
+                    Oui, elle est idéale pour découvrir l’outil avant de passer à la version complète.
                 </p>
             </div>
         </div>

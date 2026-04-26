@@ -15,7 +15,7 @@
             <img
                 src="{{ asset('images/logo-1.png') }}"
                 alt="SimpleDevis"
-                class="h-24 w-auto"
+                class="h-20 w-auto"
             >
         </a>
 

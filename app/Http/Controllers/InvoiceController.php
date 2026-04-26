@@ -155,17 +155,6 @@ class InvoiceController extends Controller
 
         $company = auth()->user()->company;
 
-        // 🔥 Préparation future facturation électronique
-        if ($invoice->is_electronic) {
-            // 👉 PLUS TARD :
-            // - Générer XML (Factur-X)
-            // - Envoyer à une PDP
-            // - Retourner un autre format
-
-            // Pour l’instant on garde le comportement normal
-        }
-
-        // PDF classique (actuel)
         $pdf = Pdf::loadView('invoices.pdf', compact('invoice', 'company'));
 
         return $pdf->download('facture-' . $invoice->invoice_number . '.pdf');
@@ -311,21 +300,28 @@ class InvoiceController extends Controller
 
         $invoice->load('items');
 
-        $invoice = Invoice::create([
-            'user_id'        => $quote->user_id,
-            'client_id'      => $quote->client_id,
-            'quote_id'       => $quote->id,
-            'invoice_number' => Invoice::generateInvoiceNumber(),
-            'date'           => now()->toDateString(),
-            'status'         => 'non_payee',
-            'subtotal_ht'    => $quote->subtotal_ht,
-            'total_tva'      => $quote->total_tva,
-            'total_ttc'      => $quote->total_ttc,
-            'notes'          => $quote->notes,
-            'due_date'       => now()->addDays(30),
+        $newInvoice = Invoice::create([
+            'user_id'           => auth()->id(),
+            'client_id'         => $invoice->client_id,
+            'quote_id'          => null,
+            'invoice_number'    => Invoice::generateInvoiceNumber(),
+            'date'              => now()->toDateString(),
+            'due_date'          => now()->addDays(30)->toDateString(),
+            'status'            => 'non_payee',
+            'subtotal_ht'       => $invoice->subtotal_ht,
+            'total_tva'         => $invoice->total_tva,
+            'total_ttc'         => $invoice->total_ttc,
+            'amount_paid'       => 0,
+            'notes'             => $invoice->notes,
 
-            // 🔥 AJOUT ICI
-            'is_electronic'  => false,
+            // Préparation e-facturation
+            'is_electronic'     => false,
+            'electronic_format' => null,
+            'pdp_id'            => null,
+            'pdp_reference'     => null,
+            'pdp_status'        => null,
+            'xml_generated_at'  => null,
+            'sent_to_pdp_at'    => null,
         ]);
 
         foreach ($invoice->items as $item) {
@@ -353,10 +349,14 @@ class InvoiceController extends Controller
             abort(403);
         }
 
+        $invoice->load('client', 'items', 'quote', 'payments', 'user.company');
+
         $xmlContent = $xmlGenerator->generate($invoice);
 
+        $invoice->markXmlGenerated();
+
         return response($xmlContent, 200)
-            ->header('Content-Type', 'application/xml')
+            ->header('Content-Type', 'application/xml; charset=UTF-8')
             ->header('Content-Disposition', 'attachment; filename="facture-' . $invoice->invoice_number . '.xml"');
     }
 }

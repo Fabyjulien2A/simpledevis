@@ -19,18 +19,22 @@ class Company extends Model
      * @var list<string>
      */
     protected $fillable = [
-        'user_id',
-        'company_name',
-        'siret',
-        'vat_number',
-        'address',
-        'postal_code',
-        'city',
-        'phone',
-        'email',
-        'logo',
-    ];
-
+    'user_id',
+    'company_name',
+    'siret',
+    'vat_number', // ✅ garder celui-là
+    'address',
+    'postal_code',
+    'city',
+    'phone',
+    'email',
+    'logo',
+    'legal_status',
+    'iban',
+    'bic',
+    'payment_terms',
+    'quote_validity',
+];
     /**
      * Une entreprise appartient à un utilisateur.
      */

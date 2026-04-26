@@ -9,7 +9,7 @@
         <img
             src="{{ asset('images/logo-1.png') }}"
             alt="SimpleDevis"
-            class="block h-9 w-auto"
+            class="block h-14 w-auto"
         >
     </a>
 </div>

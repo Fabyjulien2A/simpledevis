@@ -57,6 +57,18 @@
                     'partiellement_payee' => 'Partiellement payée',
                     default => ucfirst($invoice->status),
                 };
+
+                $lastPayment = $invoice->payments->sortByDesc('paid_at')->first();
+
+                $lastMethodLabel = $lastPayment
+                    ? match ($lastPayment->method) {
+                        'virement' => 'Virement',
+                        'carte' => 'Carte bancaire',
+                        'especes' => 'Espèces',
+                        'cheque' => 'Chèque',
+                        default => ucfirst($lastPayment->method ?? 'Non renseigné'),
+                    }
+                    : null;
             @endphp
 
             <!-- Hero facture -->
@@ -108,7 +120,7 @@
                     <div class="rounded-2xl border border-gray-100 bg-gray-50 p-5">
                         <p class="text-sm font-medium text-gray-500">Montant TTC</p>
                         <p class="mt-2 text-base font-semibold text-gray-900">
-                            {{ number_format($invoice->total_ttc, 2) }} €
+                            {{ number_format($invoice->total_ttc, 2, ',', ' ') }} €
                         </p>
                     </div>
 
@@ -135,6 +147,55 @@
                 </div>
             </div>
 
+            <!-- Facturation électronique -->
+            <div class="rounded-3xl border border-white/60 bg-white/95 p-6 shadow-xl shadow-gray-200/30 backdrop-blur-sm">
+                <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="inline-flex rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">
+                                Facturation électronique
+                            </span>
+
+                            @if($invoice->is_electronic)
+                                <span class="inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                                    {{ $invoice->pdp_status_label }}
+                                </span>
+                            @else
+                                <span class="inline-flex rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+                                    Non généré
+                                </span>
+                            @endif
+                        </div>
+
+                        @if($invoice->is_electronic)
+                            <p class="mt-3 text-sm font-medium text-gray-900">
+                                Cette facture a été préparée pour l’export électronique.
+                            </p>
+
+                            <p class="mt-1 text-sm text-gray-500">
+                                Format : {{ strtoupper($invoice->electronic_format ?? 'XML') }}
+                                @if($invoice->xml_generated_at)
+                                    · Généré le {{ $invoice->xml_generated_at->format('d/m/Y à H:i') }}
+                                @endif
+                            </p>
+                        @else
+                            <p class="mt-3 text-sm font-medium text-gray-900">
+                                Cette facture n’a pas encore d’export électronique.
+                            </p>
+
+                            <p class="mt-1 text-sm text-gray-500">
+                                Télécharge le XML pour préparer cette facture à la future facturation électronique.
+                            </p>
+                        @endif
+                    </div>
+
+                    <a href="{{ route('invoices.xml', $invoice) }}"
+                       class="inline-flex items-center justify-center rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100">
+                        {{ $invoice->is_electronic ? 'Télécharger à nouveau le XML' : 'Générer le XML' }}
+                    </a>
+                </div>
+            </div>
+
             <!-- Lignes de facture -->
             <div class="overflow-hidden rounded-3xl border border-white/60 bg-white/95 shadow-xl shadow-gray-200/30 backdrop-blur-sm">
                 <div class="border-b border-gray-100 px-6 py-5 lg:px-8">
@@ -157,9 +218,9 @@
                             @forelse($invoice->items as $item)
                                 <tr class="transition hover:bg-indigo-50/30">
                                     <td class="px-6 py-4 text-gray-800">{{ $item->description }}</td>
-                                    <td class="px-6 py-4 text-gray-500">{{ number_format($item->quantity, 2) }}</td>
-                                    <td class="px-6 py-4 text-gray-500">{{ number_format($item->unit_price_ht, 2) }} €</td>
-                                    <td class="px-6 py-4 font-semibold text-gray-900">{{ number_format($item->line_total_ht, 2) }} €</td>
+                                    <td class="px-6 py-4 text-gray-500">{{ number_format($item->quantity, 2, ',', ' ') }}</td>
+                                    <td class="px-6 py-4 text-gray-500">{{ number_format($item->unit_price_ht, 2, ',', ' ') }} €</td>
+                                    <td class="px-6 py-4 font-semibold text-gray-900">{{ number_format($item->line_total_ht, 2, ',', ' ') }} €</td>
                                 </tr>
                             @empty
                                 <tr>
@@ -193,7 +254,7 @@
                             <div class="flex items-center justify-between text-sm text-gray-600">
                                 <span>Payé</span>
                                 <span class="font-semibold text-gray-900">
-                                    {{ number_format($invoice->amount_paid_calculated, 2) }} €
+                                    {{ number_format($invoice->amount_paid_calculated, 2, ',', ' ') }} €
                                 </span>
                             </div>
                         </div>
@@ -202,24 +263,12 @@
                             <div class="flex items-center justify-between text-sm text-gray-600">
                                 <span>Reste</span>
                                 <span class="font-semibold text-gray-900">
-                                    {{ number_format($invoice->remaining_amount, 2) }} €
+                                    {{ number_format($invoice->remaining_amount, 2, ',', ' ') }} €
                                 </span>
                             </div>
                         </div>
 
-                        @if($invoice->payments->count())
-                            @php
-                                $lastPayment = $invoice->payments->sortByDesc('paid_at')->first();
-
-                                $lastMethodLabel = match ($lastPayment->method) {
-                                    'virement' => 'Virement',
-                                    'carte' => 'Carte bancaire',
-                                    'especes' => 'Espèces',
-                                    'cheque' => 'Chèque',
-                                    default => ucfirst($lastPayment->method ?? 'Non renseigné'),
-                                };
-                            @endphp
-
+                        @if($lastMethodLabel)
                             <div class="rounded-2xl bg-gray-50 p-4">
                                 <div class="flex items-center justify-between text-sm text-gray-600">
                                     <span>Dernier paiement</span>
@@ -280,18 +329,18 @@
                     <div class="mt-6 space-y-4">
                         <div class="flex items-center justify-between rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
                             <span>Total HT</span>
-                            <span class="font-semibold text-gray-900">{{ number_format($invoice->subtotal_ht, 2) }} €</span>
+                            <span class="font-semibold text-gray-900">{{ number_format($invoice->subtotal_ht, 2, ',', ' ') }} €</span>
                         </div>
 
                         <div class="flex items-center justify-between rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
                             <span>TVA</span>
-                            <span class="font-semibold text-gray-900">{{ number_format($invoice->total_tva, 2) }} €</span>
+                            <span class="font-semibold text-gray-900">{{ number_format($invoice->total_tva, 2, ',', ' ') }} €</span>
                         </div>
 
                         <div class="rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 p-5 text-white shadow-lg">
                             <div class="flex items-center justify-between">
                                 <span class="text-sm font-medium text-white/80">Total TTC</span>
-                                <span class="text-xl font-bold">{{ number_format($invoice->total_ttc, 2) }} €</span>
+                                <span class="text-xl font-bold">{{ number_format($invoice->total_ttc, 2, ',', ' ') }} €</span>
                             </div>
                         </div>
                     </div>
@@ -339,10 +388,16 @@
                         </button>
                     </form>
 
-                    <a href="{{ route('invoices.xml', $invoice) }}"
-   class="px-4 py-2 bg-gray-800 text-white rounded-lg text-sm">
-    Télécharger XML
-</a>
+                    <div class="mt-4 border-t border-gray-100 pt-4">
+                        <p class="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                            Export
+                        </p>
+
+                        <a href="{{ route('invoices.xml', $invoice) }}"
+                           class="inline-flex w-full items-center justify-center rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100">
+                            Télécharger XML
+                        </a>
+                    </div>
                 </div>
             </div>
 
@@ -380,7 +435,7 @@
                                             {{ $payment->paid_at->format('d/m/Y') }}
                                         </td>
                                         <td class="px-6 py-4 font-semibold text-gray-900">
-                                            {{ number_format($payment->amount, 2) }} €
+                                            {{ number_format($payment->amount, 2, ',', ' ') }} €
                                         </td>
                                         <td class="px-6 py-4 text-gray-700">
                                             {{ $methodLabel }}

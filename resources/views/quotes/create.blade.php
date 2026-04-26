@@ -12,7 +12,6 @@
         <form method="POST" action="{{ route('quotes.store') }}" class="space-y-8">
             @csrf
 
-            {{-- Informations du devis --}}
             <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
                 <div class="mb-6">
                     <h3 class="text-lg font-semibold text-gray-900">Informations du devis</h3>
@@ -66,13 +65,22 @@
                 </div>
             </div>
 
-            {{-- Lignes du devis --}}
             <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-                <div class="px-6 py-5 border-b border-gray-100">
-                    <h3 class="text-lg font-semibold text-gray-900">Lignes du devis</h3>
-                    <p class="text-sm text-gray-500 mt-1">
-                        Renseigne les prestations ou produits à facturer.
-                    </p>
+                <div class="px-6 py-5 border-b border-gray-100 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-900">Lignes du devis</h3>
+                        <p class="text-sm text-gray-500 mt-1">
+                            Renseigne les prestations ou produits à facturer.
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        id="add-row"
+                        class="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition"
+                    >
+                        + Ajouter une ligne
+                    </button>
                 </div>
 
                 <div class="overflow-x-auto">
@@ -83,17 +91,26 @@
                                 <th class="px-4 py-4 w-36">Qté</th>
                                 <th class="px-4 py-4 w-52">Prix unitaire (€)</th>
                                 <th class="px-6 py-4 w-44 text-right">Total HT</th>
+                                <th class="px-6 py-4 w-32 text-right">Action</th>
                             </tr>
                         </thead>
 
-                        <tbody class="divide-y divide-gray-100">
-                            @for($i = 0; $i < 3; $i++)
+                        <tbody id="quote-items-body" class="divide-y divide-gray-100">
+                            @php
+                                $oldItems = old('items', [
+                                    ['description' => '', 'quantity' => 1, 'price' => ''],
+                                    ['description' => '', 'quantity' => 1, 'price' => ''],
+                                    ['description' => '', 'quantity' => 1, 'price' => ''],
+                                ]);
+                            @endphp
+
+                            @foreach($oldItems as $i => $oldItem)
                                 <tr class="quote-row hover:bg-gray-50/70 transition">
                                     <td class="px-6 py-4">
                                         <input
                                             type="text"
                                             name="items[{{ $i }}][description]"
-                                            value="{{ old("items.$i.description") }}"
+                                            value="{{ $oldItem['description'] ?? '' }}"
                                             class="w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                             placeholder="Ex : Création site vitrine"
                                         >
@@ -105,7 +122,7 @@
                                             step="1"
                                             min="1"
                                             name="items[{{ $i }}][quantity]"
-                                            value="{{ old("items.$i.quantity", 1) }}"
+                                            value="{{ $oldItem['quantity'] ?? 1 }}"
                                             class="w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 quantity-input"
                                         >
                                     </td>
@@ -116,7 +133,7 @@
                                             step="0.01"
                                             min="0"
                                             name="items[{{ $i }}][price]"
-                                            value="{{ old("items.$i.price") }}"
+                                            value="{{ $oldItem['price'] ?? '' }}"
                                             class="w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 price-input"
                                             placeholder="0.00"
                                         >
@@ -127,8 +144,17 @@
                                             0.00 €
                                         </span>
                                     </td>
+
+                                    <td class="px-6 py-4 text-right">
+                                        <button
+                                            type="button"
+                                            class="remove-row inline-flex items-center justify-center rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100"
+                                        >
+                                            Supprimer
+                                        </button>
+                                    </td>
                                 </tr>
-                            @endfor
+                            @endforeach
                         </tbody>
                     </table>
                 </div>
@@ -140,34 +166,32 @@
                 @enderror
             </div>
 
-            {{-- Résumé en bas --}}
             <div class="flex justify-end mt-10">
-               <div class="w-full max-w-md bg-white border border-gray-200 rounded-2xl shadow-lg p-6">
-    <div class="mb-6">
-        <p class="text-sm text-gray-500">Résumé</p>
-        <h3 class="text-lg font-semibold text-gray-900 mt-1">Montants du devis</h3>
-    </div>
+                <div class="w-full max-w-md bg-white border border-gray-200 rounded-2xl shadow-lg p-6">
+                    <div class="mb-6">
+                        <p class="text-sm text-gray-500">Résumé</p>
+                        <h3 class="text-lg font-semibold text-gray-900 mt-1">Montants du devis</h3>
+                    </div>
 
-    <div class="space-y-4">
-        <div class="flex items-center justify-between border-b pb-3">
-            <span class="text-sm text-gray-600">Total HT</span>
-            <span id="global-total-ht" class="font-semibold text-gray-900">0.00 €</span>
-        </div>
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between border-b pb-3">
+                            <span class="text-sm text-gray-600">Total HT</span>
+                            <span id="global-total-ht" class="font-semibold text-gray-900">0.00 €</span>
+                        </div>
 
-        <div class="flex items-center justify-between border-b pb-3">
-            <span class="text-sm text-gray-600">TVA</span>
-            <span id="global-total-tva" class="font-semibold text-gray-900">0.00 €</span>
-        </div>
+                        <div class="flex items-center justify-between border-b pb-3">
+                            <span class="text-sm text-gray-600">TVA</span>
+                            <span id="global-total-tva" class="font-semibold text-gray-900">0.00 €</span>
+                        </div>
 
-        <div class="flex items-center justify-between pt-2">
-            <span class="text-base font-semibold text-gray-900">Total TTC</span>
-            <span id="global-total-ttc" class="text-2xl font-bold text-blue-600">0.00 €</span>
-        </div>
-    </div>
-</div>
+                        <div class="flex items-center justify-between pt-2">
+                            <span class="text-base font-semibold text-gray-900">Total TTC</span>
+                            <span id="global-total-ttc" class="text-2xl font-bold text-blue-600">0.00 €</span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            {{-- Actions --}}
             <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <a href="{{ route('quotes.index') }}"
                    class="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition">
@@ -183,6 +207,8 @@
     </div>
 
     <script>
+        let rowIndex = document.querySelectorAll('.quote-row').length;
+
         function updateQuoteTotals() {
             const rows = document.querySelectorAll('.quote-row');
             const tvaSelect = document.getElementById('tva_rate');
@@ -211,15 +237,89 @@
             document.getElementById('global-total-ttc').textContent = totalTtc.toFixed(2) + ' €';
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            const inputs = document.querySelectorAll('.quantity-input, .price-input');
-            const tvaSelect = document.getElementById('tva_rate');
-
-            inputs.forEach((input) => {
+        function bindRowEvents(row) {
+            row.querySelectorAll('.quantity-input, .price-input').forEach((input) => {
                 input.addEventListener('input', updateQuoteTotals);
             });
 
-            tvaSelect.addEventListener('change', updateQuoteTotals);
+            row.querySelector('.remove-row').addEventListener('click', () => {
+                const rows = document.querySelectorAll('.quote-row');
+
+                if (rows.length <= 1) {
+                    alert('Tu dois garder au moins une ligne dans le devis.');
+                    return;
+                }
+
+                row.remove();
+                updateQuoteTotals();
+            });
+        }
+
+        function createRow() {
+            const tbody = document.getElementById('quote-items-body');
+
+            const tr = document.createElement('tr');
+            tr.className = 'quote-row hover:bg-gray-50/70 transition';
+
+            tr.innerHTML = `
+                <td class="px-6 py-4">
+                    <input
+                        type="text"
+                        name="items[${rowIndex}][description]"
+                        class="w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        placeholder="Ex : Création site vitrine"
+                    >
+                </td>
+
+                <td class="px-4 py-4">
+                    <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        name="items[${rowIndex}][quantity]"
+                        value="1"
+                        class="w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 quantity-input"
+                    >
+                </td>
+
+                <td class="px-4 py-4">
+                    <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        name="items[${rowIndex}][price]"
+                        class="w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 price-input"
+                        placeholder="0.00"
+                    >
+                </td>
+
+                <td class="px-6 py-4 text-right">
+                    <span class="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-sm font-semibold text-gray-700 line-total">
+                        0.00 €
+                    </span>
+                </td>
+
+                <td class="px-6 py-4 text-right">
+                    <button
+                        type="button"
+                        class="remove-row inline-flex items-center justify-center rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100"
+                    >
+                        Supprimer
+                    </button>
+                </td>
+            `;
+
+            tbody.appendChild(tr);
+            bindRowEvents(tr);
+            rowIndex++;
+            updateQuoteTotals();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.quote-row').forEach(bindRowEvents);
+
+            document.getElementById('add-row').addEventListener('click', createRow);
+            document.getElementById('tva_rate').addEventListener('change', updateQuoteTotals);
 
             updateQuoteTotals();
         });

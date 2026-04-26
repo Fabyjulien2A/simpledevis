@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Cashier\Billable;
+use App\Notifications\CustomResetPasswordNotification;
 
 class User extends Authenticatable
 {
@@ -52,6 +53,11 @@ class User extends Authenticatable
     {
         return $this->hasOne(Company::class);
     }
+
+    public function sendPasswordResetNotification($token): void
+{
+    $this->notify(new CustomResetPasswordNotification($token));
+}
 
     /**
      * L'utilisateur possède plusieurs clients.
