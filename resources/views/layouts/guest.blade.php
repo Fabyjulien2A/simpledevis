@@ -1,19 +1,31 @@
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title>{{ config('app.name', 'Laravel') }}</title>
+    {{-- SEO dynamique --}}
+    <title>@yield('title', 'SimpleDevis - Devis & facturation pour indépendants')</title>
 
-        <!-- Fonts -->
-        <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700,800&display=swap" rel="stylesheet" />
+    <meta name="description" content="@yield('meta_description', 'Crée tes devis et factures facilement avec SimpleDevis. Solution simple pour freelances et indépendants.')">
 
-        <!-- Scripts -->
-        @vite(['resources/css/app.css', 'resources/js/app.js'])
-    </head>
+    <meta name="robots" content="index, follow">
+
+    {{-- Open Graph (réseaux sociaux) --}}
+    <meta property="og:title" content="SimpleDevis - Devis & facturation">
+    <meta property="og:description" content="Gère tes devis et factures simplement avec SimpleDevis.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://www.simpledevis.online">
+    <meta property="og:image" content="https://www.simpledevis.online/preview.png">
+
+    {{-- Fonts --}}
+    <link rel="preconnect" href="https://fonts.bunny.net">
+    <link href="https://fonts.bunny.net/css?family=figtree:400,500,600,700,800&display=swap" rel="stylesheet" />
+
+    {{-- Scripts --}}
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+</head>
     <body class="font-sans text-gray-900 antialiased">
         {{ $slot }}
    </body>

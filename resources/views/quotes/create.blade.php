@@ -84,14 +84,14 @@
                 </div>
 
                 <div class="overflow-x-auto">
-                    <table class="min-w-full">
+                    <table class="w-full min-w-[820px]">
                         <thead class="bg-gray-50">
                             <tr class="text-left text-sm font-semibold text-gray-600">
-                                <th class="px-6 py-4">Description</th>
-                                <th class="px-4 py-4 w-36">Qté</th>
-                                <th class="px-4 py-4 w-52">Prix unitaire (€)</th>
-                                <th class="px-6 py-4 w-44 text-right">Total HT</th>
-                                <th class="px-6 py-4 w-32 text-right">Action</th>
+                                <th class="px-6 py-4 min-w-[300px]">Description</th>
+                                <th class="px-4 py-4 min-w-[110px]">Qté</th>
+                                <th class="px-4 py-4 min-w-[140px]">Prix unitaire (€)</th>
+                                <th class="px-6 py-4 min-w-[130px] text-right">Total HT</th>
+                                <th class="px-6 py-4 min-w-[130px] text-right">Action</th>
                             </tr>
                         </thead>
 
@@ -111,7 +111,7 @@
                                             type="text"
                                             name="items[{{ $i }}][description]"
                                             value="{{ $oldItem['description'] ?? '' }}"
-                                            class="w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                            class="w-72 rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                             placeholder="Ex : Création site vitrine"
                                         >
                                     </td>
@@ -123,7 +123,7 @@
                                             min="1"
                                             name="items[{{ $i }}][quantity]"
                                             value="{{ $oldItem['quantity'] ?? 1 }}"
-                                            class="w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 quantity-input"
+                                            class="w-24 min-w-[90px] rounded-xl border-gray-300 text-center shadow-sm focus:border-blue-500 focus:ring-blue-500 quantity-input"
                                         >
                                     </td>
 
@@ -134,13 +134,13 @@
                                             min="0"
                                             name="items[{{ $i }}][price]"
                                             value="{{ $oldItem['price'] ?? '' }}"
-                                            class="w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 price-input"
+                                            class="w-32 min-w-[120px] rounded-xl border-gray-300 text-right shadow-sm focus:border-blue-500 focus:ring-blue-500 price-input"
                                             placeholder="0.00"
                                         >
                                     </td>
 
                                     <td class="px-6 py-4 text-right">
-                                        <span class="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-sm font-semibold text-gray-700 line-total">
+                                        <span class="inline-flex min-w-[90px] items-center justify-center rounded-full bg-gray-100 px-3 py-1 text-sm font-semibold text-gray-700 line-total">
                                             0.00 €
                                         </span>
                                     </td>
@@ -266,7 +266,7 @@
                     <input
                         type="text"
                         name="items[${rowIndex}][description]"
-                        class="w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        class="w-72 rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                         placeholder="Ex : Création site vitrine"
                     >
                 </td>
@@ -278,7 +278,7 @@
                         min="1"
                         name="items[${rowIndex}][quantity]"
                         value="1"
-                        class="w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 quantity-input"
+                        class="w-24 min-w-[90px] rounded-xl border-gray-300 text-center shadow-sm focus:border-blue-500 focus:ring-blue-500 quantity-input"
                     >
                 </td>
 
@@ -288,13 +288,13 @@
                         step="0.01"
                         min="0"
                         name="items[${rowIndex}][price]"
-                        class="w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 price-input"
+                        class="w-32 min-w-[120px] rounded-xl border-gray-300 text-right shadow-sm focus:border-blue-500 focus:ring-blue-500 price-input"
                         placeholder="0.00"
                     >
                 </td>
 
                 <td class="px-6 py-4 text-right">
-                    <span class="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-sm font-semibold text-gray-700 line-total">
+                    <span class="inline-flex min-w-[90px] items-center justify-center rounded-full bg-gray-100 px-3 py-1 text-sm font-semibold text-gray-700 line-total">
                         0.00 €
                     </span>
                 </td>

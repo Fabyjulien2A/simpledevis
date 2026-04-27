@@ -3,7 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SimpleDevis</title>
+
+    <title>SimpleDevis - Devis et factures en ligne pour indépendants</title>
+
+    <meta name="description" content="SimpleDevis est un logiciel en ligne pour créer des devis et factures professionnels, suivre ses paiements et gérer son activité simplement.">
+
+    <meta name="robots" content="index, follow">
+
+    <meta property="og:title" content="SimpleDevis - Devis et factures en ligne">
+    <meta property="og:description" content="Crée tes devis et factures simplement avec SimpleDevis, l’outil pensé pour les indépendants.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://www.simpledevis.online">
+
+    <link rel="canonical" href="https://www.simpledevis.online">
+
     @vite(['resources/css/app.css'])
 </head>
 <body class="bg-slate-50 text-slate-900 antialiased">

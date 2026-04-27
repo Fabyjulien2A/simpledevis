@@ -1,9 +1,25 @@
 <!DOCTYPE html>
 <html lang="fr">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tarifs - SimpleDevis</title>
+
+    <title>Tarifs SimpleDevis - Logiciel de devis et facturation</title>
+
+    <meta name="description" content="Découvrez les tarifs de SimpleDevis. Une solution simple et abordable pour créer des devis et factures professionnels en ligne. Offre gratuite et abonnement Pro.">
+
+    <meta name="robots" content="index, follow">
+
+    {{-- Open Graph --}}
+    <meta property="og:title" content="Tarifs SimpleDevis">
+    <meta property="og:description" content="Comparez les offres SimpleDevis et choisissez la solution adaptée à votre activité.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://www.simpledevis.online/tarifs">
+
+    {{-- Canonical --}}
+    <link rel="canonical" href="https://www.simpledevis.online/tarifs">
+
     @vite(['resources/css/app.css'])
 </head>
 
