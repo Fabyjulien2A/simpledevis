@@ -19,14 +19,16 @@ class InvoiceExportDataBuilder
             'status' => $invoice->status,
 
             'seller' => [
-                'name' => $company->company_name ?? $company->name ?? $invoice->user->name,
-                'address' => $company->address,
-                'postal_code' => $company->postal_code,
-                'city' => $company->city,
-                'email' => $company->email,
-                'phone' => $company->phone,
-                'siret' => $company->siret,
-                'vat_number' => $company->vat_number,
+                'seller' => [
+                    'name' => $company->company_name ?? $company->name ?? $invoice->user->name,
+                    'address' => $company?->address,
+                    'postal_code' => $company?->postal_code,
+                    'city' => $company?->city,
+                    'email' => $company?->email,
+                    'phone' => $company?->phone,
+                    'siret' => $company?->siret,
+                    'vat_number' => $company?->vat_number,
+                ],
             ],
 
             'buyer' => [
