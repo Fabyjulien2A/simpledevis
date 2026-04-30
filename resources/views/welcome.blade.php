@@ -284,7 +284,16 @@
             <a href="{{ route('legal.cgv') }}" class="hover:text-slate-900">
                 CGV
             </a>
+
+            <a href="{{ route('contact') }}" class="hover:text-slate-900">
+                Contact
+            </a>
+
+
+
         </div>
+
+       
 
     </div>
 </footer>
