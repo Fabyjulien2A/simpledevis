@@ -27,6 +27,12 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
     <body class="font-sans text-gray-900 antialiased">
+        <div class="bg-indigo-600 text-white text-center text-sm py-2 px-4">
+    🚀 SimpleDevis vous prépare aux évolutions de la facturation électronique 2026 — 
+    <a href="{{ route('reforme') }}" class="underline font-semibold">
+        En savoir plus
+    </a>
+</div>
         {{ $slot }}
    </body>
 </html>

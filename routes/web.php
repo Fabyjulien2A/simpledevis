@@ -17,6 +17,8 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+Route::view('/reforme-facturation', 'reforme')->name('reforme');
+
 Route::view('/contact', 'contact')->name('contact');
 
 Route::view('/mentions-legales', 'legal.mentions')->name('legal.mentions');
@@ -41,14 +43,14 @@ Route::middleware(['auth'])->group(function () {
 Route::post('/invoices/{invoice}/action', [InvoiceController::class, 'handleAction'])
     ->name('invoices.action');
 
-    Route::get('/tarifs', function () {
+Route::get('/tarifs', function () {
     return view('pricing');
 })->name('pricing');
 
 Route::post('/quotes/{quote}/duplicate', [QuoteController::class, 'duplicate'])
     ->name('quotes.duplicate');
 
-    Route::post('/invoices/{invoice}/duplicate', [InvoiceController::class, 'duplicate'])
+Route::post('/invoices/{invoice}/duplicate', [InvoiceController::class, 'duplicate'])
     ->name('invoices.duplicate');
 
 Route::post('/invoices/{invoice}/mark-as-paid', [InvoiceController::class, 'markAsPaid'])
@@ -60,14 +62,14 @@ Route::post('/invoices/{invoice}/mark-as-unpaid', [InvoiceController::class, 'ma
 Route::get('/invoices/{invoice}/pdf', [InvoiceController::class, 'pdf'])
     ->name('invoices.pdf');
 
-    Route::post('/invoices/{invoice}/add-payment', [InvoiceController::class, 'addPayment'])
+Route::post('/invoices/{invoice}/add-payment', [InvoiceController::class, 'addPayment'])
     ->name('invoices.addPayment');
 
 Route::post('/quotes/{quote}/convert-to-invoice', [QuoteController::class, 'convertToInvoice'])
     ->name('quotes.convertToInvoice');
 
-    Route::get('/invoices', [InvoiceController::class, 'index'])->name('invoices.index');
-    
+Route::get('/invoices', [InvoiceController::class, 'index'])->name('invoices.index');
+
 Route::middleware('auth')->group(function () {
     Route::get('/company', [CompanySettingController::class, 'edit'])->name('company.edit');
     Route::post('/company', [CompanySettingController::class, 'update'])->name('company.update');
@@ -96,4 +98,4 @@ Route::middleware('auth')->group(function () {
 
 Route::get('/quotes/{quote}/pdf', [QuoteController::class, 'pdf'])->name('quotes.pdf');
 
-require __DIR__.'/auth.php';
+require __DIR__ . '/auth.php';
