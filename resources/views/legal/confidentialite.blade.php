@@ -19,7 +19,7 @@
                         exerçant sous le nom commercial Corsica Faby Design.
                     </p>
                     <p class="mt-2">
-                        Contact : <strong>corsicafabydesign@gmail.com</strong>
+                        Contact : <strong>simpledevisonline@gmail.com</strong>
                     </p>
                 </section>
 
@@ -97,7 +97,7 @@
                         de vos données personnelles.
                     </p>
                     <p class="mt-2">
-                        Pour exercer vos droits, contactez : <strong>corsicafabydesign@gmail.com</strong>.
+                        Pour exercer vos droits, contactez : <strong>simpledevisonline@gmail.com</strong>.
                     </p>
                 </section>
 
