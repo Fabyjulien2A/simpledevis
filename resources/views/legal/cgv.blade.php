@@ -105,7 +105,7 @@
                     <h2 class="text-lg font-semibold text-slate-900">Contact</h2>
                     <p class="mt-2">
                         Pour toute question relative aux présentes CGV, vous pouvez contacter :
-                        <strong>corsicafabydesign@gmail.com</strong>.
+                        <strong>simpledevisonline@gmail.com</strong>.
                     </p>
                 </section>
             </div>

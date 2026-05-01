@@ -13,13 +13,13 @@
                     <p class="mt-2">
                         SIRET : <strong>898 216 866 00027</strong><br>
                         Adresse : <strong>Les jardins de Monte-Leone 20169 Bonifacio</strong><br>
-                        Email : <strong>corsicafabydesign@gmail.com</strong>
+                        Email : <strong>simpledevisonline@gmail.com</strong>
                     </p>
                 </section>
 
                 <section>
                     <h2 class="text-lg font-semibold text-slate-900">Responsable de la publication</h2>
-                    <p class="mt-2">Julien Faby.</p>
+                    <p class="mt-2">Corsica Faby Design</p>
                 </section>
 
                 <section>
@@ -51,7 +51,7 @@
                     <h2 class="text-lg font-semibold text-slate-900">Contact</h2>
                     <p class="mt-2">
                         Pour toute question, vous pouvez contacter l’éditeur à l’adresse suivante :
-                        <strong>corsicafabydesign@gmail.com</strong>.
+                        <strong>simpledevisonline@gmail.com</strong>.
                     </p>
                 </section>
             </div>
