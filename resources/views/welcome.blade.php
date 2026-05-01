@@ -21,6 +21,13 @@
 </head>
 <body class="bg-slate-50 text-slate-900 antialiased">
 
+            <div class="bg-indigo-600 text-white text-center text-sm py-2 px-4">
+    🚀 SimpleDevis vous prépare aux évolutions de la facturation électronique 2026 — 
+    <a href="{{ route('reforme') }}" class="underline font-semibold">
+        En savoir plus
+    </a>
+</div>
+
     {{-- NAV --}}
     <header class="sticky top-0 z-50 border-b border-slate-200/80 bg-white/90 backdrop-blur">
     <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
