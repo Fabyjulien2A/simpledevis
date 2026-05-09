@@ -19,7 +19,7 @@
                         exerçant sous le nom commercial Corsica Faby Design.
                     </p>
                     <p class="mt-2">
-                        Contact : <strong>simpledevisonline@gmail.com</strong>
+                        Contact : <strong>corsicafabydesign@gmail.com</strong>
                     </p>
                 </section>
 

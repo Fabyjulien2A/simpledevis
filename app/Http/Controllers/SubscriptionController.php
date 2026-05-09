@@ -20,7 +20,6 @@ class SubscriptionController extends Controller
 
         $priceId = match ($plan) {
             'pro' => env('STRIPE_PRICE_PRO'),
-            'business' => env('STRIPE_PRICE_BUSINESS'),
             default => abort(404),
         };
 
@@ -32,6 +31,11 @@ class SubscriptionController extends Controller
             ->checkout([
                 'success_url' => route('billing.success') . '?session_id={CHECKOUT_SESSION_ID}',
                 'cancel_url' => route('billing.cancel'),
+
+                'metadata' => [
+                    'user_id' => $user->id,
+                    'plan' => $plan,
+                ],
             ]);
     }
 
