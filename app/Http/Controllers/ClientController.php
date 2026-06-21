@@ -47,7 +47,7 @@ class ClientController extends Controller
         $user = auth()->user();
 
         // Limite plan gratuit
-        if (!$user->isSubscribed()) {
+        if (! $user->isSubscribed()) {
             $clientsCount = $user->clients()->count();
 
             if ($clientsCount >= 5) {
@@ -60,14 +60,18 @@ class ClientController extends Controller
         // Validation des données du formulaire
         $validated = $request->validate([
             'company_name' => ['nullable', 'string', 'max:255'],
-            'first_name'   => ['nullable', 'string', 'max:255'],
-            'last_name'    => ['nullable', 'string', 'max:255'],
-            'email'        => ['nullable', 'email', 'max:255'],
-            'phone'        => ['nullable', 'string', 'max:30'],
-            'address'      => ['nullable', 'string', 'max:255'],
-            'postal_code'  => ['nullable', 'string', 'max:20'],
-            'city'         => ['nullable', 'string', 'max:255'],
-            'notes'        => ['nullable', 'string'],
+            'first_name' => ['nullable', 'string', 'max:255'],
+            'last_name' => ['nullable', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:30'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'postal_code' => ['nullable', 'string', 'max:20'],
+            'city' => ['nullable', 'string', 'max:255'],
+            'notes' => ['nullable', 'string'],
+
+            'client_type' => ['required', 'in:individual,professional'],
+            'siret' => ['nullable', 'string'],
+            'vat_number' => ['nullable', 'string'],
         ]);
 
         // On associe automatiquement le client à l'utilisateur connecté
@@ -110,14 +114,18 @@ class ClientController extends Controller
 
         $validated = $request->validate([
             'company_name' => ['nullable', 'string', 'max:255'],
-            'first_name'   => ['nullable', 'string', 'max:255'],
-            'last_name'    => ['nullable', 'string', 'max:255'],
-            'email'        => ['nullable', 'email', 'max:255'],
-            'phone'        => ['nullable', 'string', 'max:30'],
-            'address'      => ['nullable', 'string', 'max:255'],
-            'postal_code'  => ['nullable', 'string', 'max:20'],
-            'city'         => ['nullable', 'string', 'max:255'],
-            'notes'        => ['nullable', 'string'],
+            'first_name' => ['nullable', 'string', 'max:255'],
+            'last_name' => ['nullable', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:30'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'postal_code' => ['nullable', 'string', 'max:20'],
+            'city' => ['nullable', 'string', 'max:255'],
+            'notes' => ['nullable', 'string'],
+
+            'client_type' => ['required', 'in:individual,professional'],
+            'siret' => ['nullable', 'string', 'max:20'],
+            'vat_number' => ['nullable', 'string', 'max:30'],
         ]);
 
         $client->update($validated);

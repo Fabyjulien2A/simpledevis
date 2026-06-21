@@ -62,6 +62,11 @@ class Invoice extends Model
         'sent_to_pdp_at' => 'datetime',
     ];
 
+    public function electronicInvoices(): HasMany
+    {
+        return $this->hasMany(ElectronicInvoice::class);
+    }
+
     /**
      * Une facture appartient à un utilisateur.
      */
@@ -162,7 +167,7 @@ class Invoice extends Model
      */
     public function getHasGeneratedXmlAttribute(): bool
     {
-        return !empty($this->xml_generated_at);
+        return ! empty($this->xml_generated_at);
     }
 
     /**
@@ -192,7 +197,7 @@ class Invoice extends Model
 
         if (
             $lastInvoice &&
-            preg_match('/FAC-' . $year . '-(\d{4})/', $lastInvoice->invoice_number, $matches)
+            preg_match('/FAC-'.$year.'-(\d{4})/', $lastInvoice->invoice_number, $matches)
         ) {
             $lastNumber = (int) $matches[1];
             $nextNumber = $lastNumber + 1;
@@ -200,6 +205,6 @@ class Invoice extends Model
             $nextNumber = 1;
         }
 
-        return 'FAC-' . $year . '-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+        return 'FAC-'.$year.'-'.str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
     }
 }

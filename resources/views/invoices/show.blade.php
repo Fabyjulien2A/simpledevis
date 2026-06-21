@@ -196,6 +196,19 @@
                 </div>
             </div>
 
+            @php
+    $electronicInvoice = $invoice->electronicInvoices()->latest()->first();
+
+    $electronicStatusClasses = match ($electronicInvoice->status ?? null) {
+        'ACCEPTED' => 'bg-green-100 text-green-700 border-green-200',
+        'REJECTED' => 'bg-red-100 text-red-700 border-red-200',
+        'submitted' => 'bg-yellow-100 text-yellow-700 border-yellow-200',
+        default => 'bg-gray-100 text-gray-700 border-gray-200',
+    };
+@endphp
+
+
+
             <!-- Lignes de facture -->
             <div class="overflow-hidden rounded-3xl border border-white/60 bg-white/95 shadow-xl shadow-gray-200/30 backdrop-blur-sm">
                 <div class="border-b border-gray-100 px-6 py-5 lg:px-8">

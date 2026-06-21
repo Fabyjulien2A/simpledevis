@@ -1,0 +1,429 @@
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| Import des contrôleurs et services
+|--------------------------------------------------------------------------
+|
+| Chaque contrôleur gère une partie spécifique de l’application :
+| - Clients
+| - Devis
+| - Factures
+| - Abonnements
+| - Dashboard
+| - Paramètres entreprise
+|
+*/
+
+use App\Http\Controllers\ClientController;
+use App\Http\Controllers\ProfileController;
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\QuoteController;
+use App\Http\Controllers\CompanySettingController;
+use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\SubscriptionController;
+use App\Services\IopoleService;
+use App\Models\ElectronicInvoice;
+use Illuminate\Support\Facades\Cache;
+
+
+/*
+|--------------------------------------------------------------------------
+| Routes de test IOPOLE
+|--------------------------------------------------------------------------
+|
+| Routes temporaires utilisées pour tester
+| la connexion à l’API IOPOLE.
+|
+| ⚠️ À supprimer en production.
+|
+*/
+
+Route::prefix('test-iopole')->group(function () {
+
+    /*
+    |--------------------------------------------------------------------------
+    | Test token IOPOLE
+    |--------------------------------------------------------------------------
+    */
+    Route::get('/token', function (IopoleService $iopole) {
+
+        Cache::forget('iopole_access_token');
+
+        $token = $iopole->getAccessToken();
+
+        dd(substr($token, 0, 80) . '...');
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | Liste des webhooks
+    |--------------------------------------------------------------------------
+    */
+    Route::get('/webhooks', function (IopoleService $iopole) {
+
+        $response = $iopole->client()->get('/v1/config/webhook');
+
+        dd($response->status(), $response->json() ?? $response->body());
+    });
+
+    Route::get('/test-iopole/status-debug/{invoiceId}', function (IopoleService $iopole, string $invoiceId) {
+    $statuses = $iopole->getInvoiceStatus($invoiceId);
+
+    return response()->json($statuses, 200, [], JSON_PRETTY_PRINT);
+});
+
+    /*
+    |--------------------------------------------------------------------------
+    | Factures non vues
+    |--------------------------------------------------------------------------
+    */
+    Route::get('/not-seen', function (IopoleService $iopole) {
+
+        return response()->json(
+            $iopole->getNotSeenInvoices()
+        );
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | Envoi facture test
+    |--------------------------------------------------------------------------
+    */
+    Route::get('/send-invoice', function (IopoleService $iopole) {
+
+        $filePath = storage_path('app/test-facture.pdf');
+
+        $response = $iopole->sendInvoiceFile($filePath);
+
+        $electronicInvoice = ElectronicInvoice::create([
+            'invoice_id' => 1, // temporaire
+            'iopole_invoice_id' => $response['id'] ?? null,
+            'status' => 'submitted',
+            'response_payload' => $response,
+            'sent_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'Facture envoyée avec succès',
+            'invoice' => $electronicInvoice,
+            'iopole_response' => $response,
+        ]);
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | Historique des statuts facture
+    |--------------------------------------------------------------------------
+    */
+    Route::get('/status/{invoiceId}', function (
+        IopoleService $iopole,
+        string $invoiceId
+    ) {
+
+        $statuses = $iopole->getInvoiceStatus($invoiceId);
+
+        return response()->json([
+            'count' => count($statuses),
+            'statuses' => collect($statuses)->map(function ($status) {
+                return [
+                    'invoice_id' => $status['invoiceId'] ?? null,
+                    'status_id' => $status['statusId'] ?? null,
+                    'date' => $status['date'] ?? null,
+                    'code' => $status['status']['code'] ?? null,
+                    'value' => $status['status']['value'] ?? null,
+                    'description' => $status['status']['desc'] ?? null,
+                    'document_status' => $status['json']['responses'][0]['documentStatus']['status']['code'] ?? null,
+                    'document_description' => $status['json']['responses'][0]['documentStatus']['status']['desc'] ?? null,
+                ];
+            }),
+        ]);
+    });
+});
+
+/*
+|--------------------------------------------------------------------------
+| Export XML facture
+|--------------------------------------------------------------------------
+|
+| Permet de générer/exporter une facture au format XML.
+|
+*/
+Route::get('/invoices/{invoice}/xml', [InvoiceController::class, 'xml'])
+    ->name('invoices.xml');
+
+/*
+|--------------------------------------------------------------------------
+| Page d’accueil
+|--------------------------------------------------------------------------
+*/
+Route::get('/', function () {
+
+    // Retourne la vue welcome.blade.php
+    return view('welcome');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Pages statiques
+|--------------------------------------------------------------------------
+|
+| Pages publiques simples.
+|
+*/
+
+// Page réforme facturation électronique
+Route::view('/reforme-facturation', 'reforme')->name('reforme');
+
+// Page contact
+Route::view('/contact', 'contact')->name('contact');
+
+// Mentions légales
+Route::view('/mentions-legales', 'legal.mentions')->name('legal.mentions');
+
+// Politique de confidentialité
+Route::view('/confidentialite', 'legal.confidentialite')->name('legal.confidentialite');
+
+// Conditions générales de vente
+Route::view('/cgv', 'legal.cgv')->name('legal.cgv');
+
+/*
+|--------------------------------------------------------------------------
+| Portail de facturation Stripe
+|--------------------------------------------------------------------------
+|
+| Permet d’accéder au portail client Stripe.
+|
+*/
+Route::post('/billing/portal', [App\Http\Controllers\BillingController::class, 'portal'])
+    ->middleware(['auth'])
+    ->name('billing.portal');
+
+/*
+|--------------------------------------------------------------------------
+| Page facturation
+|--------------------------------------------------------------------------
+*/
+Route::get('/billing', function () {
+
+    return view('billing.index');
+
+})->middleware(['auth'])->name('billing.index');
+
+/*
+|--------------------------------------------------------------------------
+| Gestion abonnements Stripe
+|--------------------------------------------------------------------------
+|
+| Routes protégées par authentification.
+|
+*/
+Route::middleware(['auth'])->group(function () {
+
+    // Page abonnements
+    Route::get('/billing', [SubscriptionController::class, 'index'])
+        ->name('billing.index');
+
+    // Souscription à un plan
+    Route::post('/subscribe/{plan}', [SubscriptionController::class, 'subscribe'])
+        ->name('billing.subscribe');
+
+    // Retour succès Stripe
+    Route::get('/subscribe/success', [SubscriptionController::class, 'success'])
+        ->name('billing.success');
+
+    // Retour annulation Stripe
+    Route::get('/subscribe/cancel', [SubscriptionController::class, 'cancel'])
+        ->name('billing.cancel');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Actions sur les factures
+|--------------------------------------------------------------------------
+*/
+
+/**
+ * Gestion des actions facture
+ * (envoyer, annuler, valider, etc.)
+ */
+Route::post('/invoices/{invoice}/action', [InvoiceController::class, 'handleAction'])
+    ->name('invoices.action');
+
+/*
+|--------------------------------------------------------------------------
+| Page tarifs
+|--------------------------------------------------------------------------
+*/
+Route::get('/tarifs', function () {
+
+    return view('pricing');
+
+})->name('pricing');
+
+/*
+|--------------------------------------------------------------------------
+| Duplication devis/factures
+|--------------------------------------------------------------------------
+*/
+
+// Dupliquer un devis
+Route::post('/quotes/{quote}/duplicate', [QuoteController::class, 'duplicate'])
+    ->name('quotes.duplicate');
+
+// Dupliquer une facture
+Route::post('/invoices/{invoice}/duplicate', [InvoiceController::class, 'duplicate'])
+    ->name('invoices.duplicate');
+
+/*
+|--------------------------------------------------------------------------
+| Gestion statut paiement facture
+|--------------------------------------------------------------------------
+*/
+
+// Marquer facture comme payée
+Route::post('/invoices/{invoice}/mark-as-paid', [InvoiceController::class, 'markAsPaid'])
+    ->name('invoices.markAsPaid');
+
+// Marquer facture comme impayée
+Route::post('/invoices/{invoice}/mark-as-unpaid', [InvoiceController::class, 'markAsUnpaid'])
+    ->name('invoices.markAsUnpaid');
+
+/*
+|--------------------------------------------------------------------------
+| Export PDF facture
+|--------------------------------------------------------------------------
+*/
+Route::get('/invoices/{invoice}/pdf', [InvoiceController::class, 'pdf'])
+    ->name('invoices.pdf');
+
+/*
+|--------------------------------------------------------------------------
+| Ajout paiement facture
+|--------------------------------------------------------------------------
+*/
+Route::post('/invoices/{invoice}/add-payment', [InvoiceController::class, 'addPayment'])
+    ->name('invoices.addPayment');
+
+/*
+|--------------------------------------------------------------------------
+| Conversion devis -> facture
+|--------------------------------------------------------------------------
+*/
+Route::post('/quotes/{quote}/convert-to-invoice', [QuoteController::class, 'convertToInvoice'])
+    ->name('quotes.convertToInvoice');
+
+/*
+|--------------------------------------------------------------------------
+| Liste des factures
+|--------------------------------------------------------------------------
+*/
+Route::get('/invoices', [InvoiceController::class, 'index'])
+    ->name('invoices.index');
+
+/*
+|--------------------------------------------------------------------------
+| Paramètres entreprise
+|--------------------------------------------------------------------------
+|
+| Routes protégées par authentification.
+|
+*/
+Route::middleware('auth')->group(function () {
+
+    // Formulaire édition entreprise
+    Route::get('/company', [CompanySettingController::class, 'edit'])
+        ->name('company.edit');
+
+    // Sauvegarde paramètres entreprise
+    Route::post('/company', [CompanySettingController::class, 'update'])
+        ->name('company.update');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Affichage détail facture
+|--------------------------------------------------------------------------
+*/
+Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])
+    ->name('invoices.show');
+
+/*
+|--------------------------------------------------------------------------
+| Dashboard utilisateur
+|--------------------------------------------------------------------------
+*/
+Route::get('/dashboard', [DashboardController::class, 'index'])
+    ->middleware(['auth', 'verified'])
+    ->name('dashboard');
+
+/*
+|--------------------------------------------------------------------------
+| Envoi facture par e-mail
+|--------------------------------------------------------------------------
+*/
+Route::post('/invoices/{invoice}/send-email', [InvoiceController::class, 'sendByEmail'])
+    ->name('invoices.sendEmail');
+
+/*
+|--------------------------------------------------------------------------
+| Routes utilisateur authentifié
+|--------------------------------------------------------------------------
+*/
+Route::middleware('auth')->group(function () {
+
+    /*
+    |--------------------------------------------------------------------------
+    | Gestion profil utilisateur
+    |--------------------------------------------------------------------------
+    */
+
+    // Affichage profil
+    Route::get('/profile', [ProfileController::class, 'edit'])
+        ->name('profile.edit');
+
+    // Mise à jour profil
+    Route::patch('/profile', [ProfileController::class, 'update'])
+        ->name('profile.update');
+
+    // Suppression compte utilisateur
+    Route::delete('/profile', [ProfileController::class, 'destroy'])
+        ->name('profile.destroy');
+
+    /*
+    |--------------------------------------------------------------------------
+    | CRUD devis
+    |--------------------------------------------------------------------------
+    */
+    Route::resource('quotes', QuoteController::class);
+
+    /*
+    |--------------------------------------------------------------------------
+    | CRUD clients
+    |--------------------------------------------------------------------------
+    */
+    Route::resource('clients', ClientController::class);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Export PDF devis
+|--------------------------------------------------------------------------
+*/
+Route::get('/quotes/{quote}/pdf', [QuoteController::class, 'pdf'])
+    ->name('quotes.pdf');
+
+/*
+|--------------------------------------------------------------------------
+| Routes authentification Laravel Breeze/Fortify
+|--------------------------------------------------------------------------
+|
+| Charge automatiquement :
+| - login
+| - register
+| - mot de passe oublié
+| - vérification email
+|
+*/
+require __DIR__ . '/auth.php';

@@ -4,12 +4,60 @@
 --}}
 
 <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+
+    <div class="md:col-span-2">
+        <label for="client_type" class="mb-1 block text-sm font-medium text-gray-700">
+            Type de client
+        </label>
+
+        <select name="client_type" id="client_type"
+                class="w-full rounded-lg border-gray-300 shadow-sm">
+            <option value="individual"
+                @selected(old('client_type', $client->client_type ?? 'individual') === 'individual')>
+                Particulier
+            </option>
+
+            <option value="professional"
+                @selected(old('client_type', $client->client_type ?? '') === 'professional')>
+                Professionnel
+            </option>
+        </select>
+
+        @error('client_type')
+            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+        @enderror
+    </div>
+
     <div>
         <label for="company_name" class="mb-1 block text-sm font-medium text-gray-700">Société</label>
         <input type="text" name="company_name" id="company_name"
                value="{{ old('company_name', $client->company_name ?? '') }}"
                class="w-full rounded-lg border-gray-300 shadow-sm">
         @error('company_name')
+            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+        @enderror
+    </div>
+
+    <div>
+        <label for="siret" class="mb-1 block text-sm font-medium text-gray-700">SIRET</label>
+        <input type="text" name="siret" id="siret"
+               value="{{ old('siret', $client->siret ?? '') }}"
+               placeholder="Ex : 12345678900011"
+               class="w-full rounded-lg border-gray-300 shadow-sm">
+        @error('siret')
+            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+        @enderror
+    </div>
+
+    <div>
+        <label for="vat_number" class="mb-1 block text-sm font-medium text-gray-700">
+            TVA intracommunautaire
+        </label>
+        <input type="text" name="vat_number" id="vat_number"
+               value="{{ old('vat_number', $client->vat_number ?? '') }}"
+               placeholder="Ex : FR12345678901"
+               class="w-full rounded-lg border-gray-300 shadow-sm">
+        @error('vat_number')
             <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
         @enderror
     </div>

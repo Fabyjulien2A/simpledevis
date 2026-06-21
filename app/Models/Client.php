@@ -22,6 +22,9 @@ class Client extends Model
     protected $fillable = [
         'user_id',
         'company_name',
+        'client_type',
+        'siret',
+        'vat_number',
         'first_name',
         'last_name',
         'email',
@@ -63,7 +66,7 @@ class Client extends Model
      */
     public function getFullNameAttribute(): string
     {
-        $fullName = trim(($this->first_name ?? '') . ' ' . ($this->last_name ?? ''));
+        $fullName = trim(($this->first_name ?? '').' '.($this->last_name ?? ''));
 
         return $fullName !== '' ? $fullName : ($this->company_name ?? 'Client sans nom');
     }

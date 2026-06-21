@@ -21,6 +21,9 @@ return new class extends Migration
             $table->string('company_name')->nullable();
             $table->string('first_name')->nullable();
             $table->string('last_name')->nullable();
+            $table->string('client_type')->default('individual');
+            $table->string('siret')->nullable();
+            $table->string('vat_number')->nullable();
 
             // Coordonnées
             $table->string('email')->nullable();
