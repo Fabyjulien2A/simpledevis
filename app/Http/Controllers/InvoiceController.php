@@ -13,6 +13,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\View\View;
+use App\Models\Client;
+use Illuminate\Support\Facades\DB;
 
 class InvoiceController extends Controller
 {
@@ -90,7 +92,7 @@ class InvoiceController extends Controller
 
         $pdf = Pdf::loadView('invoices.pdf', compact('invoice', 'company'));
 
-        return $pdf->download('facture-'.$invoice->invoice_number.'.pdf');
+        return $pdf->download('facture-' . $invoice->invoice_number . '.pdf');
     }
 
     public function sendByEmail(Invoice $invoice): RedirectResponse
@@ -284,7 +286,180 @@ class InvoiceController extends Controller
             ->header('Content-Type', 'application/xml; charset=UTF-8')
             ->header(
                 'Content-Disposition',
-                'attachment; filename="facture-'.$invoice->invoice_number.'.xml"'
+                'attachment; filename="facture-' . $invoice->invoice_number . '.xml"'
             );
+    }
+
+
+    public function create(): View
+    {
+        $clients = Client::where('user_id', auth()->id())
+            ->orderBy('company_name')
+            ->orderBy('last_name')
+            ->get();
+
+        return view('invoices.create', compact('clients'));
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'client_id' => ['required', 'exists:clients,id'],
+            'date' => ['required', 'date'],
+            'due_date' => ['nullable', 'date', 'after_or_equal:date'],
+            'notes' => ['nullable', 'string'],
+
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.description' => ['required', 'string'],
+            'items.*.quantity' => ['required', 'numeric', 'min:0.01'],
+            'items.*.unit_price_ht' => ['required', 'numeric', 'min:0'],
+            'items.*.tva_rate' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        $client = Client::where('user_id', auth()->id())
+            ->findOrFail($validated['client_id']);
+
+        DB::transaction(function () use ($validated, $client) {
+            $subtotalHt = 0;
+            $totalTva = 0;
+
+            foreach ($validated['items'] as $item) {
+                $lineHt = (float) $item['quantity'] * (float) $item['unit_price_ht'];
+                $lineTva = $lineHt * ((float) $item['tva_rate'] / 100);
+
+                $subtotalHt += $lineHt;
+                $totalTva += $lineTva;
+            }
+
+            $totalTtc = $subtotalHt + $totalTva;
+
+            $invoice = Invoice::create([
+                'user_id' => auth()->id(),
+                'client_id' => $client->id,
+                'quote_id' => null,
+                'invoice_number' => Invoice::generateInvoiceNumber(),
+                'date' => $validated['date'],
+                'due_date' => $validated['due_date'] ?? now()->addDays(30)->toDateString(),
+                'status' => 'non_payee',
+                'subtotal_ht' => $subtotalHt,
+                'total_tva' => $totalTva,
+                'total_ttc' => $totalTtc,
+                'amount_paid' => 0,
+                'notes' => $validated['notes'] ?? null,
+            ]);
+
+            foreach ($validated['items'] as $item) {
+                $lineHt = (float) $item['quantity'] * (float) $item['unit_price_ht'];
+
+                InvoiceItem::create([
+                    'invoice_id' => $invoice->id,
+                    'description' => $item['description'],
+                    'quantity' => $item['quantity'],
+                    'unit_price_ht' => $item['unit_price_ht'],
+                    'tva_rate' => $item['tva_rate'],
+                    'line_total_ht' => $lineHt,
+                ]);
+            }
+        });
+
+        return redirect()
+            ->route('invoices.index')
+            ->with('success', 'Facture créée avec succès.');
+    }
+
+    public function edit(Invoice $invoice): View
+    {
+        if ($invoice->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        $invoice->load('items');
+
+        $clients = Client::where('user_id', auth()->id())
+            ->orderBy('company_name')
+            ->orderBy('last_name')
+            ->get();
+
+        return view('invoices.edit', compact('invoice', 'clients'));
+    }
+
+    public function update(Request $request, Invoice $invoice): RedirectResponse
+    {
+        if ($invoice->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'client_id' => ['required', 'exists:clients,id'],
+            'date' => ['required', 'date'],
+            'due_date' => ['nullable', 'date', 'after_or_equal:date'],
+            'notes' => ['nullable', 'string'],
+
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.description' => ['required', 'string'],
+            'items.*.quantity' => ['required', 'numeric', 'min:0.01'],
+            'items.*.unit_price_ht' => ['required', 'numeric', 'min:0'],
+            'items.*.tva_rate' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        $client = Client::where('user_id', auth()->id())
+            ->findOrFail($validated['client_id']);
+
+        DB::transaction(function () use ($validated, $invoice, $client) {
+            $subtotalHt = 0;
+            $totalTva = 0;
+
+            foreach ($validated['items'] as $item) {
+                $lineHt = (float) $item['quantity'] * (float) $item['unit_price_ht'];
+                $lineTva = $lineHt * ((float) $item['tva_rate'] / 100);
+
+                $subtotalHt += $lineHt;
+                $totalTva += $lineTva;
+            }
+
+            $totalTtc = $subtotalHt + $totalTva;
+
+            $invoice->update([
+                'client_id' => $client->id,
+                'date' => $validated['date'],
+                'due_date' => $validated['due_date'] ?? null,
+                'subtotal_ht' => $subtotalHt,
+                'total_tva' => $totalTva,
+                'total_ttc' => $totalTtc,
+                'notes' => $validated['notes'] ?? null,
+            ]);
+
+            $invoice->items()->delete();
+
+            foreach ($validated['items'] as $item) {
+                $lineHt = (float) $item['quantity'] * (float) $item['unit_price_ht'];
+
+                InvoiceItem::create([
+                    'invoice_id' => $invoice->id,
+                    'description' => $item['description'],
+                    'quantity' => $item['quantity'],
+                    'unit_price_ht' => $item['unit_price_ht'],
+                    'tva_rate' => $item['tva_rate'],
+                    'line_total_ht' => $lineHt,
+                ]);
+            }
+        });
+
+        return redirect()
+            ->route('invoices.show', $invoice)
+            ->with('success', 'Facture mise à jour avec succès.');
+    }
+
+    public function destroy(Invoice $invoice): RedirectResponse
+    {
+        if ($invoice->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        $invoice->delete();
+
+        return redirect()
+            ->route('invoices.index')
+            ->with('success', 'Facture supprimée avec succès.');
     }
 }

@@ -10,6 +10,7 @@ use App\Http\Controllers\QuoteController;
 use App\Http\Controllers\SubscriptionController;
 use Illuminate\Support\Facades\Route;
 
+
 /*
 |--------------------------------------------------------------------------
 | Routes publiques
@@ -29,6 +30,21 @@ Route::view('/cgv', 'legal.cgv')->name('legal.cgv');
 | Authentification Laravel Breeze
 |--------------------------------------------------------------------------
 */
+
+Route::get('/invoices/create', [InvoiceController::class, 'create'])
+    ->name('invoices.create');
+
+Route::post('/invoices', [InvoiceController::class, 'store'])
+    ->name('invoices.store');
+
+Route::get('/invoices/{invoice}/edit', [InvoiceController::class, 'edit'])
+    ->name('invoices.edit');
+
+Route::put('/invoices/{invoice}', [InvoiceController::class, 'update'])
+    ->name('invoices.update');
+
+Route::delete('/invoices/{invoice}', [InvoiceController::class, 'destroy'])
+    ->name('invoices.destroy');
 
 require __DIR__.'/auth.php';
 
