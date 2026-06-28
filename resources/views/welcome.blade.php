@@ -36,6 +36,9 @@
     src="{{ asset('images/logo-1.png') }}"
     alt="SimpleDevis"
     class="h-16 sm:h-20 lg:h-24 w-auto object-contain"
+
+
+    
 />
         </a>
 

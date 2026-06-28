@@ -11,9 +11,7 @@
             <div class="relative z-10 flex h-full w-full flex-col justify-between p-12 xl:p-16">
                 <div>
                     <div class="inline-flex items-center gap-3">
-                        <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 backdrop-blur">
-                            <span class="text-xl font-bold">SD</span>
-                        </div>
+                        
                         <div>
                             <p class="text-2xl font-bold">SimpleDevis</p>
                             <p class="text-sm text-white/80">Devis & factures simplement</p>
