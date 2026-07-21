@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * Modèle entreprise.
@@ -22,7 +24,7 @@ class Company extends Model
         'user_id',
         'company_name',
         'siret',
-        'vat_number', //
+        'vat_number',
         'tva_number',
         'address',
         'postal_code',
@@ -43,5 +45,21 @@ class Company extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Les factures fournisseurs reçues par l'entreprise.
+     */
+    public function supplierInvoices(): HasMany
+    {
+        return $this->hasMany(SupplierInvoice::class);
+    }
+
+    /**
+     * Connexion de l'entreprise à SUPER PDP.
+     */
+    public function superPdpConnection(): HasOne
+    {
+        return $this->hasOne(SuperPdpConnection::class);
     }
 }

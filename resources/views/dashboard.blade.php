@@ -284,6 +284,162 @@
                 </div>
             </section>
 
+            {{-- =========================================================
+     ACHATS FOURNISSEURS
+========================================================= --}}
+<section class="mt-10">
+
+    <div class="mb-6 flex items-center justify-between">
+
+        <div>
+            <h2 class="text-2xl font-bold text-gray-900">
+                Achats fournisseurs
+            </h2>
+
+            <p class="mt-1 text-sm text-gray-500">
+                Suivez vos dépenses et vos paiements fournisseurs.
+            </p>
+        </div>
+
+        <a
+            href="{{ route('supplier-invoices.index') }}"
+            class="inline-flex items-center rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+        >
+            Voir les factures
+        </a>
+
+    </div>
+
+    <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+
+        {{-- Factures reçues --}}
+        <div class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+
+            <p class="text-sm font-medium text-gray-500">
+                Factures reçues
+            </p>
+
+            <h3 class="mt-3 text-3xl font-bold text-gray-900">
+                {{ $supplierInvoicesCount }}
+            </h3>
+
+            <p class="mt-2 text-sm text-blue-600">
+                {{ $monthlySupplierInvoicesCount }}
+                ce mois-ci
+            </p>
+
+        </div>
+
+        {{-- Total achats --}}
+        <div class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+
+            <p class="text-sm font-medium text-gray-500">
+                Total des achats
+            </p>
+
+            <h3 class="mt-3 text-3xl font-bold text-gray-900">
+                {{ number_format($monthlyPurchasesTotal,2,',',' ') }} €
+            </h3>
+
+            <p class="mt-2 text-sm text-gray-500">
+                Factures reçues ce mois
+            </p>
+
+        </div>
+
+        {{-- Déjà payé --}}
+        <div class="rounded-2xl border border-green-200 bg-green-50 p-6 shadow-sm">
+
+            <p class="text-sm font-medium text-green-700">
+                Déjà payé
+            </p>
+
+            <h3 class="mt-3 text-3xl font-bold text-green-700">
+                {{ number_format($supplierAmountPaid,2,',',' ') }} €
+            </h3>
+
+            <p class="mt-2 text-sm text-green-600">
+                Fournisseurs réglés
+            </p>
+
+        </div>
+
+        {{-- Reste à payer --}}
+        <div class="rounded-2xl border border-red-200 bg-red-50 p-6 shadow-sm">
+
+            <p class="text-sm font-medium text-red-700">
+                Reste à payer
+            </p>
+
+            <h3 class="mt-3 text-3xl font-bold text-red-700">
+                {{ number_format($supplierAmountRemaining,2,',',' ') }} €
+            </h3>
+
+            <p class="mt-2 text-sm text-red-600">
+                À décaisser
+            </p>
+
+        </div>
+
+    </div>
+
+    <div class="mt-6 grid gap-6 md:grid-cols-3">
+
+        {{-- Echues --}}
+        <div class="rounded-2xl border border-red-100 bg-white p-6 shadow-sm">
+
+            <div class="flex items-center justify-between">
+
+                <span class="text-sm font-medium text-gray-600">
+                    Factures échues
+                </span>
+
+                <span class="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+                    {{ $overdueSupplierInvoicesCount }}
+                </span>
+
+            </div>
+
+        </div>
+
+        {{-- A payer --}}
+        <div class="rounded-2xl border border-orange-100 bg-white p-6 shadow-sm">
+
+            <div class="flex items-center justify-between">
+
+                <span class="text-sm font-medium text-gray-600">
+                    À payer
+                </span>
+
+                <span class="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700">
+                    {{ $unpaidSupplierInvoicesCount }}
+                </span>
+
+            </div>
+
+        </div>
+
+        {{-- Partiellement payées --}}
+        <div class="rounded-2xl border border-yellow-100 bg-white p-6 shadow-sm">
+
+            <div class="flex items-center justify-between">
+
+                <span class="text-sm font-medium text-gray-600">
+                    Partiellement payées
+                </span>
+
+                <span class="rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-700">
+                    {{ $partialSupplierInvoicesCount }}
+                </span>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
             <section class="grid grid-cols-1 gap-6 xl:grid-cols-3">
                 <div class="rounded-3xl border border-slate-200/70 bg-white/90 p-6 shadow-sm shadow-slate-200/50 xl:col-span-2">
                     <div class="mb-6 flex items-end justify-between gap-4">
@@ -363,6 +519,47 @@
                                 Suivre les paiements et les factures
                             </p>
                         </a>
+
+
+                        <a
+    href="{{ route('supplier-invoices.index') }}"
+    class="group rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 transition duration-200 hover:-translate-y-1 hover:border-slate-300 hover:shadow-lg"
+>
+    <div class="flex items-start justify-between">
+
+        <div>
+            <p class="text-sm text-slate-500">
+                Achats
+            </p>
+
+            <p class="mt-2 text-lg font-semibold text-slate-900">
+                Factures reçues
+            </p>
+        </div>
+
+        <span class="rounded-xl bg-slate-100 p-2 text-slate-600 transition group-hover:bg-slate-900 group-hover:text-white">
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="1.8"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3"
+                />
+            </svg>
+        </span>
+
+    </div>
+
+    <p class="mt-3 text-sm leading-6 text-slate-400">
+        Consulter les factures fournisseurs et les paiements
+    </p>
+</a>
 
                         <a
                             href="{{ route('company.edit') }}"
