@@ -10,6 +10,7 @@ use Illuminate\View\View;
 use Throwable;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use App\Models\SupplierInvoicePayment;
 
 class SupplierInvoiceController extends Controller
 {
@@ -147,32 +148,104 @@ public function storePayment(
 
     $supplierInvoice->payments()->create($validated);
 
-    $totalPaid = (float) $supplierInvoice
-        ->payments()
-        ->sum('amount');
-
-    $remainingAmount = max(
-        0,
-        (float) $supplierInvoice->total_ttc - $totalPaid
-    );
-
-    $paymentStatus = match (true) {
-        $totalPaid <= 0 => 'unpaid',
-        $remainingAmount > 0 => 'partial',
-        default => 'paid',
-    };
-
-    $supplierInvoice->update([
-        'paid_amount' => $totalPaid,
-        'remaining_amount' => $remainingAmount,
-        'payment_status' => $paymentStatus,
-    ]);
+    $supplierInvoice->refreshPaymentTotals();
 
     return redirect()
         ->route('supplier-invoices.show', $supplierInvoice)
         ->with(
             'success',
             'Le paiement fournisseur a bien été enregistré.'
+        );
+}
+
+
+
+public function updatePayment(
+    Request $request,
+    SupplierInvoice $supplierInvoice,
+    SupplierInvoicePayment $payment
+): RedirectResponse {
+    $this->authorizeCompanyInvoice($supplierInvoice);
+
+    abort_unless(
+        $payment->supplier_invoice_id === $supplierInvoice->id,
+        404
+    );
+
+    $validated = $request->validate([
+        'amount' => ['required', 'numeric', 'min:0.01'],
+        'paid_at' => ['required', 'date'],
+        'method' => ['required', 'string', 'max:50'],
+        'reference' => ['nullable', 'string', 'max:255'],
+        'notes' => ['nullable', 'string', 'max:2000'],
+    ]);
+
+    $otherPaymentsTotal = (float) $supplierInvoice
+        ->payments()
+        ->whereKeyNot($payment->id)
+        ->sum('amount');
+
+    $maximumAmount = max(
+        0,
+        (float) $supplierInvoice->total_ttc - $otherPaymentsTotal
+    );
+
+    if ((float) $validated['amount'] > $maximumAmount) {
+        return redirect()
+            ->route('supplier-invoices.show', $supplierInvoice)
+            ->withErrors([
+                'amount' =>
+                    'Le montant saisi dépasse le maximum autorisé de '
+                    . number_format(
+                        $maximumAmount,
+                        2,
+                        ',',
+                        ' '
+                    )
+                    . ' €.',
+            ])
+            ->withInput();
+    }
+
+    $payment->update($validated);
+
+    $supplierInvoice->refreshPaymentTotals();
+
+    return redirect()
+        ->route('supplier-invoices.show', $supplierInvoice)
+        ->with(
+            'success',
+            'Le paiement fournisseur a bien été modifié.'
+        );
+}
+
+
+
+
+public function destroyPayment(
+    SupplierInvoice $supplierInvoice,
+    SupplierInvoicePayment $payment
+): RedirectResponse {
+
+    $this->authorizeCompanyInvoice($supplierInvoice);
+
+    abort_unless(
+        $payment->supplier_invoice_id === $supplierInvoice->id,
+        404
+    );
+
+    $payment->delete();
+
+    $supplierInvoice->refreshPaymentTotals();
+
+    return redirect()
+        ->route(
+            'supplier-invoices.show',
+            $supplierInvoice
+        )
+        ->with(
+            'success',
+            'Le paiement a été supprimé.'
         );
 }
 

@@ -33,6 +33,13 @@
                         Factures
                     </x-nav-link>
 
+                    <x-nav-link
+                    :href="route('schedule.index')"
+                    :active="request()->routeIs('schedule.*')"
+                    >
+                    Échéancier
+                    </x-nav-link>
+
                     <x-nav-link :href="route('company.edit')" :active="request()->routeIs('company.*')">
                         Entreprise
                     </x-nav-link>
@@ -116,6 +123,13 @@
             <x-responsive-nav-link :href="route('invoices.index')" :active="request()->routeIs('invoices.*')">
                 Factures
             </x-responsive-nav-link>
+
+            <x-responsive-nav-link
+    :href="route('schedule.index')"
+    :active="request()->routeIs('schedule.*')"
+>
+    Échéancier
+</x-responsive-nav-link>
 
             <x-responsive-nav-link :href="route('company.edit')" :active="request()->routeIs('company.*')">
                 Entreprise

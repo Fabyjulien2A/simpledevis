@@ -164,5 +164,31 @@ public function payments(): HasMany
         ->latest('paid_at');
 }
 
+/**
+ * Recalcule les montants et le statut de paiement.
+ */
+public function refreshPaymentTotals(): void
+{
+    $totalPaid = (float) $this->payments()
+        ->sum('amount');
+
+    $remainingAmount = max(
+        0,
+        (float) $this->total_ttc - $totalPaid
+    );
+
+    $paymentStatus = match (true) {
+        $totalPaid <= 0 => 'unpaid',
+        $remainingAmount > 0 => 'partial',
+        default => 'paid',
+    };
+
+    $this->update([
+        'paid_amount' => $totalPaid,
+        'remaining_amount' => $remainingAmount,
+        'payment_status' => $paymentStatus,
+    ]);
+}
+
 
 }

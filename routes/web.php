@@ -11,6 +11,7 @@ use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\SupplierInvoiceController;
 use App\Http\Controllers\SuperPdpController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\ScheduleController;
 
 /*
 |--------------------------------------------------------------------------
@@ -63,6 +64,11 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])
         ->middleware('verified')
         ->name('dashboard');
+
+        Route::get(
+    '/echeancier',
+    [ScheduleController::class, 'index']
+)->name('schedule.index');
 
     /*
     |--------------------------------------------------------------------------
@@ -257,6 +263,16 @@ Route::post(
     '/factures-recues/{supplierInvoice}/paiements',
     [SupplierInvoiceController::class, 'storePayment']
 )->name('supplier-invoices.payments.store');
+
+Route::put(
+    '/factures-recues/{supplierInvoice}/paiements/{payment}',
+    [SupplierInvoiceController::class, 'updatePayment']
+)->name('supplier-invoices.payments.update');
+
+Route::delete(
+    '/factures-recues/{supplierInvoice}/paiements/{payment}',
+    [SupplierInvoiceController::class, 'destroyPayment']
+)->name('supplier-invoices.payments.destroy');
 
     /*
     |--------------------------------------------------------------------------

@@ -862,9 +862,39 @@
                             @endif
                         </div>
 
-                        <span class="text-sm font-medium text-gray-600">
-                            {{ $payment->paid_at->format('d/m/Y') }}
-                        </span>
+
+                        <div class="flex items-center gap-3">
+
+    <span class="text-sm font-medium text-gray-600">
+        {{ $payment->paid_at->format('d/m/Y') }}
+    </span>
+
+    <button
+        type="button"
+        class="rounded-lg bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+        onclick="editSupplierPayment({{ $payment->id }})"
+    >
+        Modifier
+    </button>
+
+    <form
+        method="POST"
+        action="{{ route('supplier-invoices.payments.destroy', [$supplierInvoice, $payment]) }}"
+        onsubmit="return confirm('Supprimer ce paiement ?');"
+    >
+        @csrf
+        @method('DELETE')
+
+        <button
+            type="submit"
+            class="rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
+        >
+            Supprimer
+        </button>
+
+    </form>
+
+</div>
 
                     </div>
 
@@ -1148,5 +1178,11 @@
 
 
     </div>
+
+    <script>
+function editSupplierPayment(id) {
+    alert('La modification du paiement #' + id + ' sera disponible à l’étape suivante.');
+}
+</script>
 
 </x-app-layout>

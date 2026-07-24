@@ -21,14 +21,38 @@ class ClientController extends Controller
     /**
      * Affiche la liste des clients de l'utilisateur connecté.
      */
-    public function index(): View
-    {
-        $clients = Client::where('user_id', auth()->id())
-            ->latest()
-            ->paginate(10);
 
-        return view('clients.index', compact('clients'));
-    }
+    public function index(): View
+{
+    $search = trim((string) request('search'));
+
+    $clients = Client::query()
+        ->where('user_id', auth()->id())
+
+        ->when(
+            $search !== '',
+            function ($query) use ($search) {
+                $query->where(function ($subQuery) use ($search) {
+                    $subQuery
+                        ->where('first_name', 'like', '%' . $search . '%')
+                        ->orWhere('last_name', 'like', '%' . $search . '%')
+                        ->orWhere('company_name', 'like', '%' . $search . '%')
+                        ->orWhere('email', 'like', '%' . $search . '%')
+                        ->orWhere('phone', 'like', '%' . $search . '%')
+                        ->orWhere('city', 'like', '%' . $search . '%');
+                });
+            }
+        )
+
+        ->latest()
+        ->paginate(10)
+        ->withQueryString();
+
+    return view(
+        'clients.index',
+        compact('clients')
+    );
+}
 
     /**
      * Affiche le formulaire de création d'un client.
