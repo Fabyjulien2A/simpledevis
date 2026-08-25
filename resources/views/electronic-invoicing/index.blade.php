@@ -134,6 +134,24 @@
                         </div>
 
                         <div class="flex items-center justify-between py-4">
+    <span class="text-sm text-gray-500">
+        Synchronisation automatique
+    </span>
+
+    @if($connection?->status === 'connected' && $connection?->reception_enabled)
+        <span class="inline-flex items-center gap-2 text-sm font-semibold text-green-600">
+            <span class="h-2 w-2 rounded-full bg-green-500"></span>
+            Toutes les 15 minutes
+        </span>
+    @else
+        <span class="text-sm font-semibold text-gray-500">
+            Désactivée
+        </span>
+    @endif
+</div>
+
+
+                        <div class="flex items-center justify-between py-4">
                             <span class="text-sm text-gray-500">
                                 Factures reçues
                             </span>

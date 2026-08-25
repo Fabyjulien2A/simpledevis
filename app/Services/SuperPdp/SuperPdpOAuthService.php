@@ -55,13 +55,6 @@ class SuperPdpOAuthService
             'superpdp_company_id' => $company->id,
         ]);
 
-        /*
-         * Pour le premier test en bac à sable,
-         * on ne transmet pas encore le SIREN réel de SimpleDevis.
-         *
-         * L’application OAuth SUPER PDP est actuellement liée
-         * à l’entreprise fictive Burger Queen.
-         */
         $parameters = [
             'response_type' => 'code',
             'client_id' => $clientId,
@@ -95,7 +88,7 @@ class SuperPdpOAuthService
     }
 
     /**
-     * Échange le code d’autorisation contre les tokens OAuth.
+     * Échange le code d’autorisation contre les jetons OAuth.
      *
      * @throws RequestException
      */
@@ -126,20 +119,22 @@ class SuperPdpOAuthService
 
         $response = Http::asForm()
             ->acceptJson()
+            ->timeout(30)
             ->post(
-                config('services.superpdp.token_url'),
+                $this->tokenUrl(),
                 [
                     'grant_type' => 'authorization_code',
-                    'client_id' => config(
-                        'services.superpdp.client_id'
-                    ),
-                    'client_secret' => config(
-                        'services.superpdp.client_secret'
-                    ),
+
+                    'client_id' => $this->clientId(),
+
+                    'client_secret' => $this->clientSecret(),
+
                     'redirect_uri' => config(
                         'services.superpdp.redirect_uri'
                     ),
+
                     'code' => $code,
+
                     'code_verifier' => $codeVerifier,
                 ]
             );
@@ -148,26 +143,12 @@ class SuperPdpOAuthService
 
         $tokenData = $response->json();
 
-        if (empty($tokenData['access_token'])) {
-            throw new RuntimeException(
-                'SUPER PDP n’a pas retourné d’access_token.'
-            );
-        }
-
-        if (empty($tokenData['refresh_token'])) {
-            throw new RuntimeException(
-                'SUPER PDP n’a pas retourné de refresh_token.'
-            );
-        }
+        $this->validateTokenResponse($tokenData);
 
         $expiresIn = (int) (
             $tokenData['expires_in'] ?? 1800
         );
 
-        /*
-         * Le SIREN sera utilisé plus tard quand nous connecterons
-         * une vraie entreprise française au lieu de Burger Queen.
-         */
         $siren = $this->extractSiren($company->siret);
 
         $connection = SuperPdpConnection::updateOrCreate(
@@ -176,6 +157,7 @@ class SuperPdpOAuthService
             ],
             [
                 'access_token' => $tokenData['access_token'],
+
                 'refresh_token' => $tokenData['refresh_token'],
 
                 'access_token_expires_at' => now()
@@ -184,12 +166,10 @@ class SuperPdpOAuthService
                 'superpdp_company_id' =>
                     $tokenData['company_id'] ?? null,
 
-                /*
-                 * En bac à sable, cette valeur reste indicative.
-                 */
                 'directory_identifier' => $siren,
 
                 'reception_enabled' => true,
+
                 'status' => 'connected',
             ]
         );
@@ -204,15 +184,205 @@ class SuperPdpOAuthService
     }
 
     /**
+     * Retourne une connexion possédant un jeton d’accès valide.
+     *
+     * Si le jeton est expiré ou proche de l’expiration,
+     * il est automatiquement renouvelé.
+     */
+    public function ensureValidAccessToken(
+        SuperPdpConnection $connection
+    ): SuperPdpConnection {
+        if (!$connection->isConnected()) {
+            throw new RuntimeException(
+                'La connexion SUPER PDP n’est pas active.'
+            );
+        }
+
+        if (
+            $connection->access_token
+            && !$connection->tokenIsExpired()
+        ) {
+            return $connection;
+        }
+
+        return $this->refreshAccessToken($connection);
+    }
+
+    /**
+     * Renouvelle les jetons OAuth grâce au refresh token.
+     *
+     * SUPER PDP applique une rotation du refresh token :
+     * le nouveau refresh token doit immédiatement remplacer l’ancien.
+     *
+     * @throws RequestException
+     */
+    public function refreshAccessToken(
+        SuperPdpConnection $connection
+    ): SuperPdpConnection {
+        if (!$connection->refresh_token) {
+            throw new RuntimeException(
+                'Aucun refresh token SUPER PDP n’est disponible.'
+            );
+        }
+
+        $response = Http::asForm()
+            ->acceptJson()
+            ->timeout(30)
+            ->post(
+                $this->tokenUrl(),
+                [
+                    'grant_type' => 'refresh_token',
+
+                    'client_id' => $this->clientId(),
+
+                    'client_secret' => $this->clientSecret(),
+
+                    'refresh_token' =>
+                        $connection->refresh_token,
+                ]
+            );
+
+        if ($response->failed()) {
+            logger()->warning(
+                'Échec du renouvellement OAuth SUPER PDP.',
+                [
+                    'connection_id' => $connection->id,
+                    'company_id' => $connection->company_id,
+                    'status' => $response->status(),
+
+                    /*
+                     * On ne journalise jamais les jetons.
+                     */
+                    'response' => $response->json(),
+                ]
+            );
+        }
+
+        $response->throw();
+
+        $tokenData = $response->json();
+
+        $this->validateTokenResponse($tokenData);
+
+        $expiresIn = (int) (
+            $tokenData['expires_in'] ?? 1800
+        );
+
+        /*
+         * Important :
+         * le nouveau refresh token remplace l’ancien.
+         */
+        $connection->update([
+            'access_token' => $tokenData['access_token'],
+
+            'refresh_token' => $tokenData['refresh_token'],
+
+            'access_token_expires_at' => now()
+                ->addSeconds($expiresIn),
+
+            'superpdp_company_id' =>
+                $tokenData['company_id']
+                ?? $connection->superpdp_company_id,
+
+            'status' => 'connected',
+        ]);
+
+        /*
+         * Recharge le modèle avec les valeurs enregistrées.
+         */
+        return $connection->refresh();
+    }
+
+    /**
+     * Vérifie que SUPER PDP a retourné les deux jetons requis.
+     */
+    private function validateTokenResponse(
+        mixed $tokenData
+    ): void {
+        if (!is_array($tokenData)) {
+            throw new RuntimeException(
+                'La réponse OAuth SUPER PDP est invalide.'
+            );
+        }
+
+        if (empty($tokenData['access_token'])) {
+            throw new RuntimeException(
+                'SUPER PDP n’a pas retourné d’access_token.'
+            );
+        }
+
+        if (empty($tokenData['refresh_token'])) {
+            throw new RuntimeException(
+                'SUPER PDP n’a pas retourné de nouveau refresh_token.'
+            );
+        }
+    }
+
+    /**
+     * Retourne l’URL de l’endpoint OAuth token.
+     */
+    private function tokenUrl(): string
+    {
+        $tokenUrl = config('services.superpdp.token_url');
+
+        if (!$tokenUrl) {
+            throw new RuntimeException(
+                'L’URL OAuth token de SUPER PDP n’est pas configurée.'
+            );
+        }
+
+        return $tokenUrl;
+    }
+
+    /**
+     * Retourne l’identifiant OAuth.
+     */
+    private function clientId(): string
+    {
+        $clientId = config('services.superpdp.client_id');
+
+        if (!$clientId) {
+            throw new RuntimeException(
+                'Le client_id SUPER PDP n’est pas configuré.'
+            );
+        }
+
+        return $clientId;
+    }
+
+    /**
+     * Retourne le secret OAuth.
+     */
+    private function clientSecret(): string
+    {
+        $clientSecret = config(
+            'services.superpdp.client_secret'
+        );
+
+        if (!$clientSecret) {
+            throw new RuntimeException(
+                'Le client_secret SUPER PDP n’est pas configuré.'
+            );
+        }
+
+        return $clientSecret;
+    }
+
+    /**
      * Extrait le SIREN, soit les neuf premiers chiffres du SIRET.
      */
-    private function extractSiren(?string $siret): ?string
-    {
+    private function extractSiren(
+        ?string $siret
+    ): ?string {
         if (!$siret) {
             return null;
         }
 
-        $digits = preg_replace('/\D/', '', $siret);
+        $digits = preg_replace(
+            '/\D/',
+            '',
+            $siret
+        );
 
         if (!$digits || strlen($digits) !== 14) {
             return null;

@@ -20,20 +20,21 @@ class Client extends Model
      * @var list<string>
      */
     protected $fillable = [
-        'user_id',
-        'company_name',
-        'client_type',
-        'siret',
-        'vat_number',
-        'first_name',
-        'last_name',
-        'email',
-        'phone',
-        'address',
-        'postal_code',
-        'city',
-        'notes',
-    ];
+    'user_id',
+    'company_name',
+    'client_type',
+    'country_code',
+    'siret',
+    'vat_number',
+    'first_name',
+    'last_name',
+    'email',
+    'phone',
+    'address',
+    'postal_code',
+    'city',
+    'notes',
+];
 
     /**
      * Un client appartient à un utilisateur.

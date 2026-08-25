@@ -14,31 +14,91 @@
                 </div>
 
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div>
-                        <p class="text-sm font-medium text-gray-700">Email</p>
-                        <p class="text-sm text-gray-900">{{ $client->email ?: '-' }}</p>
-                    </div>
 
-                    <div>
-                        <p class="text-sm font-medium text-gray-700">Téléphone</p>
-                        <p class="text-sm text-gray-900">{{ $client->phone ?: '-' }}</p>
-                    </div>
+    <div>
+        <p class="text-sm font-medium text-gray-700">Type de client</p>
 
-                    <div>
-                        <p class="text-sm font-medium text-gray-700">Adresse</p>
-                        <p class="text-sm text-gray-900">{{ $client->address ?: '-' }}</p>
-                    </div>
+        <p class="text-sm text-gray-900">
+            {{ $client->client_type === 'professional'
+                ? 'Professionnel'
+                : 'Particulier' }}
+        </p>
+    </div>
 
-                    <div>
-                        <p class="text-sm font-medium text-gray-700">Code postal</p>
-                        <p class="text-sm text-gray-900">{{ $client->postal_code ?: '-' }}</p>
-                    </div>
+    <div>
+        <p class="text-sm font-medium text-gray-700">Pays</p>
 
-                    <div>
-                        <p class="text-sm font-medium text-gray-700">Ville</p>
-                        <p class="text-sm text-gray-900">{{ $client->city ?: '-' }}</p>
-                    </div>
-                </div>
+        <p class="text-sm text-gray-900">
+            {{ match($client->country_code) {
+                'FR' => 'France',
+                'BE' => 'Belgique',
+                'IT' => 'Italie',
+                'ES' => 'Espagne',
+                'DE' => 'Allemagne',
+                default => '-',
+            } }}
+        </p>
+    </div>
+
+    <div>
+        <p class="text-sm font-medium text-gray-700">SIRET</p>
+
+        <p class="text-sm text-gray-900">
+            {{ $client->siret ?: '-' }}
+        </p>
+    </div>
+
+    <div>
+        <p class="text-sm font-medium text-gray-700">
+            TVA intracommunautaire
+        </p>
+
+        <p class="text-sm text-gray-900">
+            {{ $client->vat_number ?: '-' }}
+        </p>
+    </div>
+
+    <div>
+        <p class="text-sm font-medium text-gray-700">Email</p>
+
+        <p class="text-sm text-gray-900">
+            {{ $client->email ?: '-' }}
+        </p>
+    </div>
+
+    <div>
+        <p class="text-sm font-medium text-gray-700">Téléphone</p>
+
+        <p class="text-sm text-gray-900">
+            {{ $client->phone ?: '-' }}
+        </p>
+    </div>
+
+    <div>
+        <p class="text-sm font-medium text-gray-700">Adresse</p>
+
+        <p class="text-sm text-gray-900">
+            {{ $client->address ?: '-' }}
+        </p>
+    </div>
+
+    <div>
+        <p class="text-sm font-medium text-gray-700">Code postal</p>
+
+        <p class="text-sm text-gray-900">
+            {{ $client->postal_code ?: '-' }}
+        </p>
+    </div>
+
+    <div>
+        <p class="text-sm font-medium text-gray-700">Ville</p>
+
+        <p class="text-sm text-gray-900">
+            {{ $client->city ?: '-' }}
+        </p>
+    </div>
+
+</div>
 
                 <div>
                     <p class="text-sm font-medium text-gray-700">Notes</p>

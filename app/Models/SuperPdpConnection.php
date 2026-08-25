@@ -58,13 +58,14 @@ class SuperPdpConnection extends Model
     }
 
     public function tokenIsExpired(): bool
-    {
-        if (!$this->access_token_expires_at) {
-            return true;
-        }
-
-        return $this->access_token_expires_at->isPast();
+{
+    if (!$this->access_token_expires_at) {
+        return true;
     }
+
+    return $this->access_token_expires_at
+        ->lte(now()->addMinutes(5));
+}
 
     public function isConnected(): bool
     {

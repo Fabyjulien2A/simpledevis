@@ -12,6 +12,11 @@ use RuntimeException;
 
 class SuperPdpInvoiceService
 {
+
+public function __construct(
+    private readonly SuperPdpOAuthService $oauthService
+) {
+}
     /**
      * Récupère une page de factures depuis SUPER PDP.
      *
@@ -21,7 +26,8 @@ class SuperPdpInvoiceService
         SuperPdpConnection $connection,
         ?int $startingAfterId = null
     ): array {
-        $this->ensureAccessTokenExists($connection);
+           $connection = $this->oauthService
+        ->ensureValidAccessToken($connection);
 
         $query = [];
 
@@ -60,7 +66,8 @@ class SuperPdpInvoiceService
         SuperPdpConnection $connection,
         int $invoiceId
     ): array {
-        $this->ensureAccessTokenExists($connection);
+        $connection = $this->oauthService
+    ->ensureValidAccessToken($connection);
 
         $response = Http::withToken($connection->access_token)
             ->acceptJson()
@@ -530,18 +537,6 @@ class SuperPdpInvoiceService
         return $digits;
     }
 
-    /**
-     * Vérifie que la connexion possède un jeton.
-     */
-    private function ensureAccessTokenExists(
-        SuperPdpConnection $connection
-    ): void {
-        if (!$connection->access_token) {
-            throw new RuntimeException(
-                'Aucun jeton d’accès SUPER PDP n’est disponible.'
-            );
-        }
-    }
 
     /**
      * Retourne l’URL de base de l’API.

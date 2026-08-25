@@ -94,6 +94,7 @@ class ClientController extends Controller
             'notes' => ['nullable', 'string'],
 
             'client_type' => ['required', 'in:individual,professional'],
+            'country_code' => ['required', 'string', 'size:2'],
             'siret' => ['nullable', 'string'],
             'vat_number' => ['nullable', 'string'],
         ]);
@@ -148,6 +149,7 @@ class ClientController extends Controller
             'notes' => ['nullable', 'string'],
 
             'client_type' => ['required', 'in:individual,professional'],
+            'country_code' => ['required', 'string', 'size:2'],
             'siret' => ['nullable', 'string', 'max:20'],
             'vat_number' => ['nullable', 'string', 'max:30'],
         ]);
