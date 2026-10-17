@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\DB;
 
 class QuoteController extends Controller
 {
@@ -241,7 +242,8 @@ class QuoteController extends Controller
     /**
      * Convertir en facture
      */
-    public function convertToInvoice(Quote $quote): RedirectResponse
+    
+public function convertToInvoice(Quote $quote): RedirectResponse
 {
     if ($quote->user_id !== auth()->id()) {
         abort(403);
@@ -249,54 +251,82 @@ class QuoteController extends Controller
 
     $user = auth()->user();
 
-    // Limite plan gratuit
-    if (!$user->isSubscribed()) {
+    // Limite du plan gratuit
+    if (! $user->isSubscribed()) {
         $invoicesCount = $user->invoices()->count();
 
         if ($invoicesCount >= 10) {
             return redirect()
                 ->route('quotes.show', $quote)
-                ->with('error', 'Tu as atteint la limite de 10 factures. Passe à une offre supérieure.');
+                ->with(
+                    'error',
+                    'Tu as atteint la limite de 10 factures. Passe à une offre supérieure.'
+                );
         }
     }
 
-    if ($quote->invoice) {
+    $invoice = DB::transaction(function () use ($quote) {
+
+        // Verrouille le devis pour éviter deux conversions simultanées.
+        $lockedQuote = Quote::whereKey($quote->id)
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        // Vérifie à nouveau après verrouillage.
+        if ($lockedQuote->invoice()->exists()) {
+            return null;
+        }
+
+        $lockedQuote->load('items');
+
+        // Création d'un brouillon sans numéro définitif.
+        $invoice = Invoice::create([
+            'user_id' => $lockedQuote->user_id,
+            'client_id' => $lockedQuote->client_id,
+            'quote_id' => $lockedQuote->id,
+            'invoice_number' => null,
+            'document_status' => 'draft',
+            'date' => now()->toDateString(),
+            'due_date' => now()->addDays(30)->toDateString(),
+            'status' => 'non_payee',
+            'subtotal_ht' => $lockedQuote->subtotal_ht,
+            'total_tva' => $lockedQuote->total_tva,
+            'total_ttc' => $lockedQuote->total_ttc,
+            'amount_paid' => 0,
+            'notes' => $lockedQuote->notes,
+        ]);
+
+        foreach ($lockedQuote->items as $item) {
+            InvoiceItem::create([
+                'invoice_id' => $invoice->id,
+                'description' => $item->description,
+                'quantity' => $item->quantity,
+                'unit_price_ht' => $item->unit_price_ht,
+                'tva_rate' => $item->tva_rate,
+                'line_total_ht' => $item->line_total_ht,
+            ]);
+        }
+
+        $lockedQuote->update([
+            'status' => 'accepte',
+        ]);
+
+        return $invoice;
+    });
+
+    if (! $invoice) {
         return redirect()
             ->route('quotes.show', $quote)
-            ->with('error', 'Déjà transformé en facture.');
+            ->with('error', 'Ce devis a déjà été transformé en facture.');
     }
-
-    $quote->load('items');
-
-    $invoice = Invoice::create([
-        'user_id'        => $quote->user_id,
-        'client_id'      => $quote->client_id,
-        'quote_id'       => $quote->id,
-        'invoice_number' => Invoice::generateInvoiceNumber(),
-        'date'           => now()->toDateString(),
-        'status'         => 'non_payee',
-        'subtotal_ht'    => $quote->subtotal_ht,
-        'total_tva'      => $quote->total_tva,
-        'total_ttc'      => $quote->total_ttc,
-        'notes'          => $quote->notes,
-        'due_date'       => now()->addDays(30),
-    ]);
-
-    foreach ($quote->items as $item) {
-        InvoiceItem::create([
-            'invoice_id'    => $invoice->id,
-            'description'   => $item->description,
-            'quantity'      => $item->quantity,
-            'unit_price_ht' => $item->unit_price_ht,
-            'tva_rate'      => $item->tva_rate,
-            'line_total_ht' => $item->line_total_ht,
-        ]);
-    }
-
-    $quote->update(['status' => 'accepte']);
 
     return redirect()
-        ->route('quotes.show', $quote)
-        ->with('success', 'Transformé en facture : ' . $invoice->invoice_number);
+        ->route('invoices.show', $invoice)
+        ->with(
+            'success',
+            'Devis transformé en brouillon de facture. Vérifie les informations avant validation définitive.'
+        );
 }
+
+   
 }

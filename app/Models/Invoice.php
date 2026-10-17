@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Modèle facture.
@@ -28,6 +29,7 @@ class Invoice extends Model
         'date',
         'due_date',
         'status',
+        'document_status',
         'subtotal_ht',
         'total_tva',
         'total_ttc',
@@ -183,28 +185,69 @@ class Invoice extends Model
         ]);
     }
 
+
+
     /**
-     * Génère un numéro de facture du type FAC-2026-0001.
+     * Indique si la facture est un brouillon.
      */
-    public static function generateInvoiceNumber(): string
+    public function isDraft(): bool
     {
-        $year = now()->year;
-
-        $lastInvoice = self::whereYear('created_at', $year)
-            ->whereNotNull('invoice_number')
-            ->orderByDesc('id')
-            ->first();
-
-        if (
-            $lastInvoice &&
-            preg_match('/FAC-'.$year.'-(\d{4})/', $lastInvoice->invoice_number, $matches)
-        ) {
-            $lastNumber = (int) $matches[1];
-            $nextNumber = $lastNumber + 1;
-        } else {
-            $nextNumber = 1;
-        }
-
-        return 'FAC-'.$year.'-'.str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
+        return $this->document_status === 'draft';
     }
+
+    /**
+     * Indique si la facture est définitive.
+     */
+    public function isIssued(): bool
+    {
+        return $this->document_status === 'issued';
+    }
+
+    
+    /**
+ * Réserve le prochain numéro de facture pour un utilisateur.
+ *
+ * IMPORTANT : cette méthode doit être appelée à l'intérieur
+ * d'une transaction DB::transaction().
+ */
+public static function generateInvoiceNumber(int $userId): string
+{
+    $year = now()->year;
+
+    // Verrouille la ligne utilisateur pour sérialiser les attributions,
+    // y compris lorsque le compteur de l'année n'existe pas encore.
+    DB::table('users')
+        ->where('id', $userId)
+        ->lockForUpdate()
+        ->first();
+
+    $counter = DB::table('invoice_counters')
+        ->where('user_id', $userId)
+        ->where('year', $year)
+        ->first();
+
+    $nextNumber = $counter
+        ? $counter->last_number + 1
+        : 1;
+
+    if ($counter) {
+        DB::table('invoice_counters')
+            ->where('id', $counter->id)
+            ->update([
+                'last_number' => $nextNumber,
+                'updated_at' => now(),
+            ]);
+    } else {
+        DB::table('invoice_counters')->insert([
+            'user_id' => $userId,
+            'year' => $year,
+            'last_number' => $nextNumber,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    return sprintf('FAC-%d-%04d', $year, $nextNumber);
+}
+
 }

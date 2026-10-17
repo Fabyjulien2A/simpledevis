@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 
 class InvoiceController extends Controller
 {
+
     public function index(Request $request): View
     {
         $query = Invoice::where('user_id', auth()->id())
@@ -39,18 +40,25 @@ class InvoiceController extends Controller
         }
 
         if ($request->filled('status')) {
-            if ($request->status === 'overdue') {
-                $query->where('status', '!=', 'payee')
+            if ($request->status === 'draft') {
+                $query->where('document_status', 'draft');
+            } elseif ($request->status === 'overdue') {
+                $query->where('document_status', 'issued')
+                    ->where('status', '!=', 'payee')
                     ->whereDate('due_date', '<', now());
             } else {
-                $query->where('status', $request->status);
+                $query->where('document_status', 'issued')
+                    ->where('status', $request->status);
             }
         }
 
-        $invoices = $query->latest()->paginate(10)->withQueryString();
+        $invoices = $query->latest()
+            ->paginate(10)
+            ->withQueryString();
 
         return view('invoices.index', compact('invoices'));
     }
+
 
     public function show(Invoice $invoice): View
     {
@@ -235,7 +243,8 @@ class InvoiceController extends Controller
             'user_id' => auth()->id(),
             'client_id' => $invoice->client_id,
             'quote_id' => null,
-            'invoice_number' => Invoice::generateInvoiceNumber(),
+            'invoice_number' => null,
+            'document_status' => 'draft',
             'date' => now()->toDateString(),
             'due_date' => now()->addDays(30)->toDateString(),
             'status' => 'non_payee',
@@ -244,7 +253,6 @@ class InvoiceController extends Controller
             'total_ttc' => $invoice->total_ttc,
             'amount_paid' => 0,
             'notes' => $invoice->notes,
-
             'is_electronic' => false,
             'electronic_format' => null,
             'pdp_id' => null,
@@ -304,6 +312,7 @@ class InvoiceController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
+            'action' => ['required', 'in:draft,issue'],
             'client_id' => ['required', 'exists:clients,id'],
             'date' => ['required', 'date'],
             'due_date' => ['nullable', 'date', 'after_or_equal:date'],
@@ -337,10 +346,15 @@ class InvoiceController extends Controller
                 'user_id' => auth()->id(),
                 'client_id' => $client->id,
                 'quote_id' => null,
-                'invoice_number' => Invoice::generateInvoiceNumber(),
+                'invoice_number' => $validated['action'] === 'issue'
+                    ? Invoice::generateInvoiceNumber((int) auth()->id())
+                    : null,
                 'date' => $validated['date'],
                 'due_date' => $validated['due_date'] ?? now()->addDays(30)->toDateString(),
                 'status' => 'non_payee',
+                'document_status' => $validated['action'] === 'issue'
+                    ? 'issued'
+                    : 'draft',
                 'subtotal_ht' => $subtotalHt,
                 'total_tva' => $totalTva,
                 'total_ttc' => $totalTtc,
@@ -364,13 +378,22 @@ class InvoiceController extends Controller
 
         return redirect()
             ->route('invoices.index')
-            ->with('success', 'Facture créée avec succès.');
+            ->with(
+                'success',
+                $validated['action'] === 'draft'
+                    ? 'Brouillon enregistré avec succès.'
+                    : 'Facture validée définitivement avec succès.'
+            );
     }
 
     public function edit(Invoice $invoice): View
     {
         if ($invoice->user_id !== auth()->id()) {
             abort(403);
+        }
+
+        if ($invoice->isIssued()) {
+            abort(403, 'Une facture définitive ne peut pas être modifiée.');
         }
 
         $invoice->load('items');
@@ -387,6 +410,10 @@ class InvoiceController extends Controller
     {
         if ($invoice->user_id !== auth()->id()) {
             abort(403);
+        }
+
+        if ($invoice->isIssued()) {
+            abort(403, 'Une facture définitive ne peut pas être modifiée.');
         }
 
         $validated = $request->validate([
@@ -456,10 +483,50 @@ class InvoiceController extends Controller
             abort(403);
         }
 
+        if ($invoice->isIssued()) {
+            abort(403, 'Une facture définitive ne peut pas être supprimée.');
+        }
+
         $invoice->delete();
 
         return redirect()
             ->route('invoices.index')
             ->with('success', 'Facture supprimée avec succès.');
+    }
+
+
+    public function finalize(Invoice $invoice): RedirectResponse
+    {
+        if ($invoice->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        if (! $invoice->isDraft()) {
+            return redirect()
+                ->route('invoices.show', $invoice)
+                ->with('error', 'Cette facture est déjà définitive.');
+        }
+
+        DB::transaction(function () use ($invoice) {
+            // Verrouiller la facture pour éviter deux validations simultanées.
+            $lockedInvoice = Invoice::whereKey($invoice->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! $lockedInvoice->isDraft()) {
+                abort(409, 'Cette facture a déjà été validée.');
+            }
+
+            // Attribuer son numéro uniquement au moment de la validation.
+            $lockedInvoice->update([
+                'invoice_number' => Invoice::generateInvoiceNumber((int) $lockedInvoice->user_id),
+                'document_status' => 'issued',
+                'status' => 'non_payee',
+            ]);
+        });
+
+        return redirect()
+            ->route('invoices.show', $invoice)
+            ->with('success', 'Facture validée définitivement avec succès.');
     }
 }

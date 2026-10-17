@@ -43,28 +43,28 @@
             {{-- Cartes résumé --}}
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                    <p class="text-sm text-gray-500">Total factures</p>
+                    <p class="text-sm text-gray-500">Documents au total</p>
                     <p class="mt-2 text-2xl font-bold text-gray-900">
                         {{ $invoices->total() }}
                     </p>
                 </div>
 
                 <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                    <p class="text-sm text-gray-500">Non payées</p>
+                    <p class="text-sm text-gray-500">Non payées (page)</p>
                     <p class="mt-2 text-2xl font-bold text-gray-900">
-                        {{ $invoices->getCollection()->where('status', 'non_payee')->count() }}
+                        {{ $invoices->getCollection()->where('document_status', 'issued')->where('status', 'non_payee')->count() }}
                     </p>
                 </div>
 
                 <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                    <p class="text-sm text-gray-500">Payées</p>
+                    <p class="text-sm text-gray-500">Payées (page)</p>
                     <p class="mt-2 text-2xl font-bold text-gray-900">
-                        {{ $invoices->getCollection()->where('status', 'payee')->count() }}
+                        {{ $invoices->getCollection()->where('document_status', 'issued')->where('status', 'payee')->count() }}
                     </p>
                 </div>
 
                 <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                    <p class="text-sm text-gray-500">Montant visible</p>
+                    <p class="text-sm text-gray-500">Montant visible (page)</p>
                     <p class="mt-2 text-2xl font-bold text-gray-900">
                         {{ number_format($invoices->getCollection()->sum('total_ttc'), 2, ',', ' ') }} €
                     </p>
@@ -90,6 +90,8 @@
                     >
                         <option value="">Tous les statuts</option>
 
+                        <option value="draft" {{ request('status') == 'draft' ? 'selected' : '' }}>Brouillons</option>
+
                         <option value="non_payee" {{ request('status') == 'non_payee' ? 'selected' : '' }}>
                             Non payée
                         </option>
@@ -98,33 +100,22 @@
                             Partiellement payée
                         </option>
 
-                        <option value="payee" {{ request('status') == 'payee' ? 'selected' : '' }}>
-                            Payée
-                        </option>
-
-                        <option value="overdue" {{ request('status') == 'overdue' ? 'selected' : '' }}>
-                            En retard
-                        </option>
+                        <option value="payee" {{ request('status') == 'payee' ? 'selected' : '' }}>Payées</option>
+                        <option value="overdue" {{ request('status') == 'overdue' ? 'selected' : '' }}>En retard</option>
                     </select>
 
-                    <a href="{{ route('invoices.index') }}"
-                       class="text-sm text-gray-500 hover:underline">
-                        Réinitialiser
-                    </a>
+                    <a href="{{ route('invoices.index') }}" class="text-sm text-gray-500 hover:underline">Réinitialiser</a>
                 </form>
             </div>
 
-            {{-- Table des factures --}}
+            {{-- Tableau des factures --}}
             <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
                 <div class="border-b border-gray-100 px-6 py-5">
                     <h3 class="text-lg font-semibold text-gray-900">Toutes les factures</h3>
-                    <p class="mt-1 text-sm text-gray-500">
-                        Clique sur une facture pour la consulter, la modifier ou la dupliquer.
-                    </p>
+                    <p class="mt-1 text-sm text-gray-500">Consulte tes factures et brouillons.</p>
                 </div>
-
                 <div class="overflow-x-auto">
-                    <table class="min-w-full text-sm">
+                        <table class="min-w-full text-sm">
                         <thead class="bg-gray-50">
                             <tr class="text-left text-sm font-semibold text-gray-600">
                                 <th class="px-6 py-4">Numéro</th>
@@ -147,11 +138,14 @@
                                         (float) $invoice->total_ttc - (float) $invoice->amount_paid_calculated
                                     );
 
-                                    $isOverdue = $invoice->status !== 'payee'
+                                    $isDraft = $invoice->isDraft();
+
+                                    $isOverdue = ! $isDraft && $invoice->status !== 'payee'
                                         && $invoice->due_date
                                         && $invoice->due_date->isPast();
 
                                     $statusClasses = match (true) {
+                                        $isDraft => 'bg-amber-100 text-amber-800',
                                         $isOverdue => 'bg-orange-100 text-orange-700',
                                         $invoice->status === 'payee' => 'bg-green-100 text-green-700',
                                         $invoice->status === 'partiellement_payee' => 'bg-yellow-100 text-yellow-700',
@@ -160,6 +154,7 @@
                                     };
 
                                     $statusLabel = match (true) {
+                                        $isDraft => 'Brouillon',
                                         $isOverdue => 'En retard',
                                         $invoice->status === 'payee' => 'Payée',
                                         $invoice->status === 'partiellement_payee' => 'Partielle',
@@ -171,7 +166,7 @@
                                 <tr class="transition hover:bg-gray-50">
                                     <td class="px-6 py-4">
                                         <div class="font-semibold text-gray-900">
-                                            {{ $invoice->invoice_number }}
+                                            {{ $invoice->invoice_number ?? 'Brouillon #'.$invoice->id }}
                                         </div>
                                     </td>
 
@@ -209,7 +204,7 @@
                                     </td>
 
                                     <td class="px-6 py-4 font-semibold text-gray-900">
-                                        {{ number_format($remaining, 2, ',', ' ') }} €
+                                        {{ $isDraft ? '—' : number_format($remaining, 2, ',', ' ').' €' }}
                                     </td>
 
                                     <td class="px-6 py-4">
@@ -219,10 +214,12 @@
                                                 Voir
                                             </a>
 
+                                            @if($isDraft)
                                             <a href="{{ route('invoices.edit', $invoice) }}"
                                                class="rounded-md bg-yellow-50 px-3 py-1 text-xs font-medium text-yellow-600 hover:bg-yellow-100 transition">
                                                 Modifier
                                             </a>
+                                            @endif
 
                                             <form action="{{ route('invoices.duplicate', $invoice) }}" method="POST">
                                                 @csrf

@@ -1,41 +1,35 @@
 <x-app-layout>
     <x-slot name="header">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex items-center justify-between gap-4">
             <div>
                 <p class="text-sm font-medium text-indigo-600">Facturation</p>
-                <h2 class="text-2xl font-bold text-gray-900 leading-tight">
-                    Détail de la facture
-                </h2>
-                <p class="mt-1 text-sm text-gray-500">
-                    Consultez les informations, paiements et actions disponibles pour cette facture.
-                </p>
+                <h2 class="text-2xl font-bold text-gray-900">Détail de la facture</h2>
             </div>
-
-            <a href="{{ route('invoices.index') }}"
-               class="inline-flex items-center justify-center rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50">
-                Retour aux factures
-            </a>
+            <a href="{{ route('invoices.index') }}" class="rounded-xl border bg-white px-4 py-2 text-sm text-gray-700">Retour aux factures</a>
         </div>
     </x-slot>
 
+    @php
+        $isDraft = $invoice->isDraft();
+        $statusLabel = match ($invoice->status) {
+            'payee' => 'Payée',
+            'partiellement_payee' => 'Partiellement payée',
+            'non_payee' => 'Non payée',
+            default => ucfirst($invoice->status ?? 'Non renseigné'),
+        };
+    @endphp
+
     <div class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50 py-10">
         <div class="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
-
             @if(session('success'))
-                <div class="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700 shadow-sm">
-                    {{ session('success') }}
-                </div>
+                <div class="rounded-2xl border border-green-200 bg-green-50 p-4 text-green-800">{{ session('success') }}</div>
             @endif
-
             @if(session('error'))
-                <div class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 shadow-sm">
-                    {{ session('error') }}
-                </div>
+                <div class="rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">{{ session('error') }}</div>
             @endif
-
             @if($errors->any())
-                <div class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-sm">
-                    <ul class="list-disc pl-5 space-y-1">
+                <div class="rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800">
+                    <ul class="list-disc pl-5">
                         @foreach($errors->all() as $error)
                             <li>{{ $error }}</li>
                         @endforeach
@@ -43,416 +37,172 @@
                 </div>
             @endif
 
-            @php
-                $statusClasses = match ($invoice->status) {
-                    'non_payee' => 'bg-red-100 text-red-700 border-red-200',
-                    'payee' => 'bg-green-100 text-green-700 border-green-200',
-                    'partiellement_payee' => 'bg-yellow-100 text-yellow-700 border-yellow-200',
-                    default => 'bg-gray-100 text-gray-700 border-gray-200',
-                };
+            <div class="overflow-hidden rounded-3xl border bg-white shadow-lg">
+                <div class="bg-gradient-to-r from-indigo-600 to-purple-700 px-6 py-8 sm:px-8">
+                    <p class="text-sm text-indigo-100">{{ $isDraft ? 'Document en préparation' : 'Facture définitive' }}</p>
+                    <div class="mt-2 flex flex-wrap items-center justify-between gap-4">
+                        <h3 class="text-3xl font-bold">{{ $isDraft ? 'Brouillon #'.$invoice->id : $invoice->invoice_number }}</h3>
+                        <span class="rounded-full bg-white/20 px-4 py-2 text-sm font-semibold">{{ $isDraft ? 'Brouillon' : $statusLabel }}</span>
+                    </div>
+                    <p class="mt-2 text-sm text-indigo-100">Date : {{ $invoice->date?->format('d/m/Y') ?? '—' }}</p>
+                </div>
+                <div class="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-4">
+                    <div class="rounded-2xl bg-gray-50 p-4">
+                        <p class="text-sm text-gray-500">Client</p>
+                        <p class="mt-2 font-semibold text-gray-900">{{ $invoice->client?->company_name ?: trim(($invoice->client?->first_name ?? '').' '.($invoice->client?->last_name ?? '')) ?: '—' }}</p>
+                        <p class="text-sm text-gray-500">{{ $invoice->client?->email }}</p>
+                    </div>
+                    <div class="rounded-2xl bg-gray-50 p-4">
+                        <p class="text-sm text-gray-500">Devis lié</p>
+                        <p class="mt-2 font-semibold text-gray-900">{{ $invoice->quote?->quote_number ?? 'Aucun' }}</p>
+                    </div>
+                    <div class="rounded-2xl bg-gray-50 p-4">
+                        <p class="text-sm text-gray-500">Total TTC</p>
+                        <p class="mt-2 text-xl font-bold text-gray-900">{{ number_format((float)$invoice->total_ttc, 2, ',', ' ') }} €</p>
+                    </div>
+                    <div class="rounded-2xl bg-gray-50 p-4">
+                        <p class="text-sm text-gray-500">Échéance</p>
+                        <p class="mt-2 font-semibold text-gray-900">{{ $invoice->due_date?->format('d/m/Y') ?? 'Non définie' }}</p>
+                        @if(!$isDraft && $invoice->is_overdue)
+                            <p class="mt-1 text-sm font-medium text-red-600">En retard</p>
+                        @endif
+                    </div>
+                </div>
+            </div>
 
-                $statusLabel = match ($invoice->status) {
-                    'non_payee' => 'Non payée',
-                    'payee' => 'Payée',
-                    'partiellement_payee' => 'Partiellement payée',
-                    default => ucfirst($invoice->status),
-                };
-
-                $lastPayment = $invoice->payments->sortByDesc('paid_at')->first();
-
-                $lastMethodLabel = $lastPayment
-                    ? match ($lastPayment->method) {
-                        'virement' => 'Virement',
-                        'carte' => 'Carte bancaire',
-                        'especes' => 'Espèces',
-                        'cheque' => 'Chèque',
-                        default => ucfirst($lastPayment->method ?? 'Non renseigné'),
-                    }
-                    : null;
-            @endphp
-
-            <!-- Hero facture -->
-            <div class="overflow-hidden rounded-3xl border border-white/60 bg-white/95 shadow-2xl shadow-gray-200/40 backdrop-blur-sm">
-                <div class="bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 px-6 py-8 text-white lg:px-8">
-                    <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            @if($isDraft)
+                <div class="rounded-3xl border border-amber-200 bg-amber-50 p-6">
+                    <h4 class="text-lg font-semibold text-amber-900">Facture en brouillon</h4>
+                    <p class="mt-2 text-sm text-amber-800">Vérifiez les informations avant de valider. Cette opération attribuera un numéro définitif et empêchera toute modification.</p>
+                    <div class="mt-4 flex flex-wrap gap-3">
+                        <a href="{{ route('invoices.edit', $invoice) }}" class="rounded-xl border border-amber-200 bg-white px-5 py-3 text-sm font-semibold text-gray-800">Modifier le brouillon</a>
+                        <form method="POST" action="{{ route('invoices.finalize', $invoice) }}" onsubmit="return confirm('Valider définitivement cette facture ? Cette action est irréversible.')">
+                            @csrf
+                            <button type="submit" class="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white">Valider définitivement</button>
+                        </form>
+                    </div>
+                </div>
+            @else
+                <div class="rounded-3xl border bg-white p-6 shadow-lg">
+                    <div class="flex flex-wrap items-center justify-between gap-4">
                         <div>
-                            <p class="text-sm font-medium text-white/75">Facture</p>
-                            <h3 class="mt-2 text-3xl font-bold tracking-tight">
-                                {{ $invoice->invoice_number }}
-                            </h3>
-                            <p class="mt-2 text-sm text-white/80">
-                                Créée le {{ $invoice->date->format('d/m/Y') }}
-                            </p>
-                        </div>
-
-                        <div class="flex flex-wrap gap-3">
-                            <span class="inline-flex items-center rounded-full border px-4 py-2 text-sm font-semibold {{ $statusClasses }}">
-                                {{ $statusLabel }}
-                            </span>
-
-                            @if($invoice->due_date)
-                                <span class="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white">
-                                    Échéance : {{ $invoice->due_date->format('d/m/Y') }}
-                                </span>
+                            <h4 class="text-lg font-semibold text-gray-900">Facturation électronique</h4>
+                            <p class="mt-1 text-sm text-gray-500">{{ $invoice->is_electronic ? $invoice->pdp_status_label : 'Aucun XML généré' }}</p>
+                            @if($invoice->xml_generated_at)
+                                <p class="mt-1 text-sm text-gray-500">XML généré le {{ $invoice->xml_generated_at->format('d/m/Y à H:i') }}</p>
                             @endif
                         </div>
+                        <a href="{{ route('invoices.xml', $invoice) }}" class="rounded-xl bg-indigo-50 px-5 py-3 text-sm font-semibold text-indigo-700">{{ $invoice->is_electronic ? 'Télécharger le XML' : 'Générer le XML' }}</a>
                     </div>
                 </div>
+            @endif
 
-                <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-4 lg:p-8">
-                    <div class="rounded-2xl border border-gray-100 bg-gray-50 p-5">
-                        <p class="text-sm font-medium text-gray-500">Client</p>
-                        <p class="mt-2 text-base font-semibold text-gray-900">
-                            {{ $invoice->client->full_name }}
-                        </p>
-                        @if($invoice->client->email)
-                            <p class="mt-1 text-sm text-gray-500">{{ $invoice->client->email }}</p>
-                        @endif
-                    </div>
-
-                    <div class="rounded-2xl border border-gray-100 bg-gray-50 p-5">
-                        <p class="text-sm font-medium text-gray-500">Devis lié</p>
-                        <p class="mt-2 text-base font-semibold text-gray-900">
-                            {{ $invoice->quote?->quote_number ?? 'Aucun devis lié' }}
-                        </p>
-                    </div>
-
-                    <div class="rounded-2xl border border-gray-100 bg-gray-50 p-5">
-                        <p class="text-sm font-medium text-gray-500">Montant TTC</p>
-                        <p class="mt-2 text-base font-semibold text-gray-900">
-                            {{ number_format($invoice->total_ttc, 2, ',', ' ') }} €
-                        </p>
-                    </div>
-
-                    <div class="rounded-2xl border border-gray-100 bg-gray-50 p-5">
-                        <p class="text-sm font-medium text-gray-500">Paiement</p>
-                        @if($invoice->due_date)
-                            <p class="mt-2 text-base font-semibold text-gray-900">
-                                {{ $invoice->due_date->format('d/m/Y') }}
-                            </p>
-
-                            @if($invoice->is_overdue)
-                                <p class="mt-1 text-sm font-medium text-red-600">
-                                    En retard de paiement
-                                </p>
-                            @else
-                                <p class="mt-1 text-sm text-gray-500">
-                                    Échéance définie
-                                </p>
-                            @endif
-                        @else
-                            <p class="mt-2 text-sm text-gray-500">Échéance non définie</p>
-                        @endif
-                    </div>
+            <div class="overflow-hidden rounded-3xl border bg-white shadow-lg">
+                <div class="border-b p-6">
+                    <h4 class="text-lg font-semibold text-gray-900">Détail des prestations</h4>
                 </div>
-            </div>
-
-            <!-- Facturation électronique -->
-            <div class="rounded-3xl border border-white/60 bg-white/95 p-6 shadow-xl shadow-gray-200/30 backdrop-blur-sm">
-                <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <span class="inline-flex rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">
-                                Facturation électronique
-                            </span>
-
-                            @if($invoice->is_electronic)
-                                <span class="inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-                                    {{ $invoice->pdp_status_label }}
-                                </span>
-                            @else
-                                <span class="inline-flex rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
-                                    Non généré
-                                </span>
-                            @endif
-                        </div>
-
-                        @if($invoice->is_electronic)
-                            <p class="mt-3 text-sm font-medium text-gray-900">
-                                Cette facture a été préparée pour l’export électronique.
-                            </p>
-
-                            <p class="mt-1 text-sm text-gray-500">
-                                Format : {{ strtoupper($invoice->electronic_format ?? 'XML') }}
-                                @if($invoice->xml_generated_at)
-                                    · Généré le {{ $invoice->xml_generated_at->format('d/m/Y à H:i') }}
-                                @endif
-                            </p>
-                        @else
-                            <p class="mt-3 text-sm font-medium text-gray-900">
-                                Cette facture n’a pas encore d’export électronique.
-                            </p>
-
-                            <p class="mt-1 text-sm text-gray-500">
-                                Télécharge le XML pour préparer cette facture à la future facturation électronique.
-                            </p>
-                        @endif
-                    </div>
-
-                    <a href="{{ route('invoices.xml', $invoice) }}"
-                       class="inline-flex items-center justify-center rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100">
-                        {{ $invoice->is_electronic ? 'Télécharger à nouveau le XML' : 'Générer le XML' }}
-                    </a>
-                </div>
-            </div>
-
-            @php
-    $electronicInvoice = $invoice->electronicInvoices()->latest()->first();
-
-    $electronicStatusClasses = match ($electronicInvoice->status ?? null) {
-        'ACCEPTED' => 'bg-green-100 text-green-700 border-green-200',
-        'REJECTED' => 'bg-red-100 text-red-700 border-red-200',
-        'submitted' => 'bg-yellow-100 text-yellow-700 border-yellow-200',
-        default => 'bg-gray-100 text-gray-700 border-gray-200',
-    };
-@endphp
-
-
-
-            <!-- Lignes de facture -->
-            <div class="overflow-hidden rounded-3xl border border-white/60 bg-white/95 shadow-xl shadow-gray-200/30 backdrop-blur-sm">
-                <div class="border-b border-gray-100 px-6 py-5 lg:px-8">
-                    <h4 class="text-lg font-semibold text-gray-900">Lignes de facture</h4>
-                    <p class="mt-1 text-sm text-gray-500">Prestations ou produits facturés</p>
-                </div>
-
                 <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="border-b bg-gray-50/80 text-gray-600">
-                                <th class="px-6 py-4 text-left font-semibold">Description</th>
-                                <th class="px-6 py-4 text-left font-semibold">Qté</th>
-                                <th class="px-6 py-4 text-left font-semibold">Prix unitaire</th>
-                                <th class="px-6 py-4 text-left font-semibold">Total HT</th>
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-gray-50 text-gray-600">
+                            <tr>
+                                <th class="px-6 py-4">Description</th>
+                                <th class="px-6 py-4">Quantité</th>
+                                <th class="px-6 py-4">Prix unitaire HT</th>
+                                <th class="px-6 py-4">TVA</th>
+                                <th class="px-6 py-4">Total HT</th>
                             </tr>
                         </thead>
-
-                        <tbody class="divide-y divide-gray-100 bg-white">
+                        <tbody class="divide-y">
                             @forelse($invoice->items as $item)
-                                <tr class="transition hover:bg-indigo-50/30">
-                                    <td class="px-6 py-4 text-gray-800">{{ $item->description }}</td>
-                                    <td class="px-6 py-4 text-gray-500">{{ number_format($item->quantity, 2, ',', ' ') }}</td>
-                                    <td class="px-6 py-4 text-gray-500">{{ number_format($item->unit_price_ht, 2, ',', ' ') }} €</td>
-                                    <td class="px-6 py-4 font-semibold text-gray-900">{{ number_format($item->line_total_ht, 2, ',', ' ') }} €</td>
+                                <tr>
+                                    <td class="px-6 py-4">{{ $item->description }}</td>
+                                    <td class="px-6 py-4">{{ number_format((float)$item->quantity, 2, ',', ' ') }}</td>
+                                    <td class="px-6 py-4">{{ number_format((float)$item->unit_price_ht, 2, ',', ' ') }} €</td>
+                                    <td class="px-6 py-4">{{ number_format((float)$item->tva_rate, 2, ',', ' ') }} %</td>
+                                    <td class="px-6 py-4 font-semibold">{{ number_format((float)$item->line_total_ht, 2, ',', ' ') }} €</td>
                                 </tr>
                             @empty
-                                <tr>
-                                    <td colspan="4" class="px-6 py-10 text-center text-gray-500">
-                                        Aucune ligne de facture
-                                    </td>
-                                </tr>
+                                <tr><td colspan="5" class="px-6 py-8 text-center text-gray-500">Aucune ligne de facture</td></tr>
                             @endforelse
                         </tbody>
                     </table>
                 </div>
             </div>
 
-            <!-- Cartes du bas -->
-            <div class="grid grid-cols-1 gap-6 xl:grid-cols-3">
-
-                <!-- Paiement -->
-                <div class="rounded-3xl border border-white/60 bg-white/95 p-6 shadow-xl shadow-gray-200/30 backdrop-blur-sm">
-                    <div class="flex items-start justify-between">
-                        <div>
-                            <h4 class="text-lg font-semibold text-gray-900">Paiement</h4>
-                            <p class="mt-1 text-sm text-gray-500">Suivi et enregistrement des paiements</p>
-                        </div>
-                        <div class="rounded-2xl bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-600">
-                            Suivi
-                        </div>
+            <div class="grid gap-6 xl:grid-cols-3">
+                <div class="rounded-3xl border bg-white p-6 shadow-lg">
+                    <h4 class="text-lg font-semibold text-gray-900">Paiements</h4>
+                    <div class="mt-5 space-y-3 text-sm">
+                        <div class="flex justify-between rounded-xl bg-gray-50 p-3"><span>Déjà payé</span><strong>{{ number_format((float)$invoice->amount_paid_calculated, 2, ',', ' ') }} €</strong></div>
+                        <div class="flex justify-between rounded-xl bg-gray-50 p-3"><span>Reste à payer</span><strong>{{ number_format((float)$invoice->remaining_amount, 2, ',', ' ') }} €</strong></div>
                     </div>
-
-                    <div class="mt-6 space-y-4">
-                        <div class="rounded-2xl bg-gray-50 p-4">
-                            <div class="flex items-center justify-between text-sm text-gray-600">
-                                <span>Payé</span>
-                                <span class="font-semibold text-gray-900">
-                                    {{ number_format($invoice->amount_paid_calculated, 2, ',', ' ') }} €
-                                </span>
-                            </div>
-                        </div>
-
-                        <div class="rounded-2xl bg-gray-50 p-4">
-                            <div class="flex items-center justify-between text-sm text-gray-600">
-                                <span>Reste</span>
-                                <span class="font-semibold text-gray-900">
-                                    {{ number_format($invoice->remaining_amount, 2, ',', ' ') }} €
-                                </span>
-                            </div>
-                        </div>
-
-                        @if($lastMethodLabel)
-                            <div class="rounded-2xl bg-gray-50 p-4">
-                                <div class="flex items-center justify-between text-sm text-gray-600">
-                                    <span>Dernier paiement</span>
-                                    <span class="font-semibold text-gray-900">{{ $lastMethodLabel }}</span>
-                                </div>
-                            </div>
-                        @endif
-                    </div>
-
-                    <form action="{{ route('invoices.addPayment', $invoice) }}" method="POST" class="mt-6 space-y-3">
-                        @csrf
-
-                        <label class="block text-sm font-semibold text-gray-700">
-                            Enregistrer un paiement
-                        </label>
-
-                        <div class="grid grid-cols-1 gap-3">
-                            <input
-                                type="number"
-                                name="amount"
-                                step="0.01"
-                                min="0.01"
-                                class="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                                placeholder="Montant"
-                            >
-
-                            <select
-                                name="method"
-                                class="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                            >
+                    @if($isDraft)
+                        <p class="mt-5 rounded-xl bg-amber-50 p-4 text-sm text-amber-800">Les paiements seront disponibles après validation.</p>
+                    @elseif($invoice->remaining_amount > 0)
+                        <form action="{{ route('invoices.addPayment', $invoice) }}" method="POST" class="mt-5 space-y-3">
+                            @csrf
+                            <label for="payment_amount" class="block text-sm font-semibold text-gray-700">Enregistrer un paiement</label>
+                            <input id="payment_amount" type="number" name="amount" min="0.01" step="0.01" required placeholder="Montant" class="w-full rounded-xl border-gray-200 text-sm">
+                            <select name="method" required class="w-full rounded-xl border-gray-200 text-sm">
                                 <option value="virement">Virement</option>
                                 <option value="carte">Carte bancaire</option>
                                 <option value="especes">Espèces</option>
                                 <option value="cheque">Chèque</option>
                             </select>
-
-                            <button
-                                class="inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-200 transition hover:from-indigo-700 hover:to-purple-700"
-                            >
-                                Valider le paiement
-                            </button>
-                        </div>
-                    </form>
+                            <button type="submit" class="w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white">Valider le paiement</button>
+                        </form>
+                    @endif
                 </div>
 
-                <!-- Totaux -->
-                <div class="rounded-3xl border border-white/60 bg-white/95 p-6 shadow-xl shadow-gray-200/30 backdrop-blur-sm">
-                    <div class="flex items-start justify-between">
-                        <div>
-                            <h4 class="text-lg font-semibold text-gray-900">Totaux</h4>
-                            <p class="mt-1 text-sm text-gray-500">Résumé financier de la facture</p>
-                        </div>
-                        <div class="rounded-2xl bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-600">
-                            Résumé
-                        </div>
+                <div class="rounded-3xl border bg-white p-6 shadow-lg">
+                    <h4 class="text-lg font-semibold text-gray-900">Totaux</h4>
+                    <div class="mt-5 space-y-3 text-sm">
+                        <div class="flex justify-between"><span>Sous-total HT</span><strong>{{ number_format((float)$invoice->subtotal_ht, 2, ',', ' ') }} €</strong></div>
+                        <div class="flex justify-between"><span>TVA</span><strong>{{ number_format((float)$invoice->total_tva, 2, ',', ' ') }} €</strong></div>
+                        <div class="flex justify-between border-t pt-4 text-lg"><span class="font-semibold">Total TTC</span><strong>{{ number_format((float)$invoice->total_ttc, 2, ',', ' ') }} €</strong></div>
                     </div>
-
-                    <div class="mt-6 space-y-4">
-                        <div class="flex items-center justify-between rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
-                            <span>Total HT</span>
-                            <span class="font-semibold text-gray-900">{{ number_format($invoice->subtotal_ht, 2, ',', ' ') }} €</span>
-                        </div>
-
-                        <div class="flex items-center justify-between rounded-2xl bg-gray-50 p-4 text-sm text-gray-600">
-                            <span>TVA</span>
-                            <span class="font-semibold text-gray-900">{{ number_format($invoice->total_tva, 2, ',', ' ') }} €</span>
-                        </div>
-
-                        <div class="rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 p-5 text-white shadow-lg">
-                            <div class="flex items-center justify-between">
-                                <span class="text-sm font-medium text-white/80">Total TTC</span>
-                                <span class="text-xl font-bold">{{ number_format($invoice->total_ttc, 2, ',', ' ') }} €</span>
-                            </div>
-                        </div>
-                    </div>
+                    @if($invoice->notes)
+                        <div class="mt-6 border-t pt-4"><p class="text-sm font-semibold">Notes</p><p class="mt-2 whitespace-pre-line text-sm text-gray-600">{{ $invoice->notes }}</p></div>
+                    @endif
                 </div>
 
-                <!-- Actions -->
-                <div class="rounded-3xl border border-white/60 bg-white/95 p-6 shadow-xl shadow-gray-200/30 backdrop-blur-sm">
-                    <div class="flex items-start justify-between">
-                        <div>
-                            <h4 class="text-lg font-semibold text-gray-900">Actions</h4>
-                            <p class="mt-1 text-sm text-gray-500">Gérez la facture rapidement</p>
-                        </div>
-                        <div class="rounded-2xl bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
-                            Outils
-                        </div>
-                    </div>
-
-                    <form action="{{ route('invoices.action', $invoice) }}" method="POST" class="mt-6 space-y-3">
-                        @csrf
-
-                        <select name="action"
-                                class="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
-                            <option value="">-- Action --</option>
-                            <option value="pdf">Télécharger PDF</option>
-                            <option value="email">Envoyer par email</option>
-
-                            @if($invoice->status !== 'payee')
-                                <option value="pay">Marquer comme payée</option>
-                            @else
-                                <option value="unpay">Remettre en non payée</option>
-                            @endif
-                        </select>
-
-                        <button type="submit"
-                                class="inline-flex w-full items-center justify-center rounded-2xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black">
-                            Valider l’action
-                        </button>
-                    </form>
-
+                <div class="rounded-3xl border bg-white p-6 shadow-lg">
+                    <h4 class="text-lg font-semibold text-gray-900">Actions</h4>
+                    @if(!$isDraft)
+                        <form action="{{ route('invoices.action', $invoice) }}" method="POST" class="mt-5 space-y-3">
+                            @csrf
+                            <select name="action" required class="w-full rounded-xl border-gray-200 text-sm">
+                                <option value="">Choisir une action</option>
+                                <option value="pdf">Télécharger PDF</option>
+                                <option value="email">Envoyer par e-mail</option>
+                                @if($invoice->status !== 'payee')
+                                    <option value="pay">Marquer comme payée</option>
+                                @endif
+                            </select>
+                            <button type="submit" class="w-full rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white">Valider l'action</button>
+                        </form>
+                    @else
+                        <p class="mt-5 text-sm text-amber-800">Validez le brouillon pour accéder aux exports et à l'envoi.</p>
+                    @endif
                     <form action="{{ route('invoices.duplicate', $invoice) }}" method="POST" class="mt-3">
                         @csrf
-                        <button type="submit"
-                                class="inline-flex w-full items-center justify-center rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-100">
-                            Dupliquer la facture
-                        </button>
+                        <button type="submit" class="w-full rounded-xl border bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-700">Dupliquer en brouillon</button>
                     </form>
-
-                    <div class="mt-4 border-t border-gray-100 pt-4">
-                        <p class="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                            Export
-                        </p>
-
-                        <a href="{{ route('invoices.xml', $invoice) }}"
-                           class="inline-flex w-full items-center justify-center rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100">
-                            Télécharger XML
-                        </a>
-                    </div>
                 </div>
             </div>
 
-            <!-- Historique -->
-            @if($invoice->payments->count())
-                <div class="overflow-hidden rounded-3xl border border-white/60 bg-white/95 shadow-xl shadow-gray-200/30 backdrop-blur-sm">
-                    <div class="border-b border-gray-100 px-6 py-5 lg:px-8">
-                        <h4 class="text-lg font-semibold text-gray-900">Historique des paiements</h4>
-                        <p class="mt-1 text-sm text-gray-500">Liste des paiements enregistrés sur cette facture</p>
-                    </div>
-
+            @if($invoice->payments->isNotEmpty())
+                <div class="overflow-hidden rounded-3xl border bg-white shadow-lg">
+                    <div class="border-b p-6"><h4 class="text-lg font-semibold text-gray-900">Historique des paiements</h4></div>
                     <div class="overflow-x-auto">
-                        <table class="w-full text-sm">
-                            <thead>
-                                <tr class="border-b bg-gray-50/80 text-gray-600">
-                                    <th class="px-6 py-4 text-left font-semibold">Date</th>
-                                    <th class="px-6 py-4 text-left font-semibold">Montant</th>
-                                    <th class="px-6 py-4 text-left font-semibold">Mode</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-100 bg-white">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-gray-50"><tr><th class="px-6 py-4">Date</th><th class="px-6 py-4">Montant</th><th class="px-6 py-4">Mode</th></tr></thead>
+                            <tbody class="divide-y">
                                 @foreach($invoice->payments as $payment)
-                                    @php
-                                        $methodLabel = match ($payment->method) {
-                                            'virement' => 'Virement',
-                                            'carte' => 'Carte bancaire',
-                                            'especes' => 'Espèces',
-                                            'cheque' => 'Chèque',
-                                            default => ucfirst($payment->method ?? 'Non renseigné'),
-                                        };
-                                    @endphp
-
-                                    <tr class="transition hover:bg-indigo-50/30">
-                                        <td class="px-6 py-4 text-gray-700">
-                                            {{ $payment->paid_at->format('d/m/Y') }}
-                                        </td>
-                                        <td class="px-6 py-4 font-semibold text-gray-900">
-                                            {{ number_format($payment->amount, 2, ',', ' ') }} €
-                                        </td>
-                                        <td class="px-6 py-4 text-gray-700">
-                                            {{ $methodLabel }}
-                                        </td>
+                                    <tr>
+                                        <td class="px-6 py-4">{{ $payment->paid_at?->format('d/m/Y') ?? '—' }}</td>
+                                        <td class="px-6 py-4">{{ number_format((float)$payment->amount, 2, ',', ' ') }} €</td>
+                                        <td class="px-6 py-4">{{ ucfirst($payment->method ?? 'Non renseigné') }}</td>
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -460,7 +210,6 @@
                     </div>
                 </div>
             @endif
-
         </div>
     </div>
 </x-app-layout>

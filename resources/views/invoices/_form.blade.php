@@ -215,19 +215,42 @@
             class="w-full rounded-lg border-gray-300">{{ old('notes', $invoice->notes ?? '') }}</textarea>
     </div>
 
-    {{-- Boutons --}}
-    <div class="flex gap-3">
+    
+{{-- Boutons --}}
+<div class="flex flex-wrap gap-3">
+
+    @if(!isset($invoice))
+        <button
+            type="submit"
+            name="action"
+            value="draft"
+            class="bg-gray-800 text-white px-6 py-3 rounded-lg hover:bg-gray-900">
+            Enregistrer comme brouillon
+        </button>
+
+        <button
+            type="submit"
+            name="action"
+            value="issue"
+            class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700"
+            onclick="return confirm('Valider définitivement cette facture ? Elle ne pourra plus être modifiée.')">
+            Valider définitivement
+        </button>
+    @else
         <button
             type="submit"
             class="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700">
-            Enregistrer la facture
+            Enregistrer les modifications
         </button>
+    @endif
 
-        <a href="{{ route('invoices.index') }}"
-           class="bg-gray-200 px-6 py-3 rounded-lg">
-            Annuler
-        </a>
-    </div>
+    <a href="{{ route('invoices.index') }}"
+       class="bg-gray-200 px-6 py-3 rounded-lg">
+        Annuler
+    </a>
+
+</div>
+
 </div>
 
 <script>

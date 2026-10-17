@@ -197,6 +197,11 @@ Route::middleware(['auth'])->group(function () {
         [InvoiceController::class, 'addPayment']
     )->name('invoices.addPayment');
 
+    Route::post(
+    '/invoices/{invoice}/finalize',
+    [InvoiceController::class, 'finalize']
+)->name('invoices.finalize');
+
     /*
     |--------------------------------------------------------------------------
     | Facturation électronique / SUPER PDP
