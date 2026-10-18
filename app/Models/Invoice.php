@@ -109,6 +109,16 @@ class Invoice extends Model
         return $this->hasMany(Payment::class);
     }
 
+
+    /**
+     * Une facture peut posséder plusieurs avoirs.
+     */
+    public function creditNotes(): HasMany
+    {
+        return $this->hasMany(CreditNote::class);
+    }
+
+
     /**
      * Indique si la facture est en retard.
      */
@@ -132,7 +142,22 @@ class Invoice extends Model
      */
     public function getRemainingAmountAttribute(): float
     {
-        return max(0, (float) $this->total_ttc - $this->amount_paid_calculated);
+        // Total des avoirs définitifs associés à cette facture
+        $totalCredits = (float) $this->creditNotes()
+            ->where('status', 'issued')
+            ->sum('total_ttc');
+
+        // Montant net de la facture après déduction des avoirs
+        $netTotal = max(
+            0,
+            (float) $this->total_ttc - $totalCredits
+        );
+
+        // Reste à payer après déduction des paiements
+        return max(
+            0,
+            round($netTotal - $this->amount_paid_calculated, 2)
+        );
     }
 
     /**
@@ -203,51 +228,50 @@ class Invoice extends Model
         return $this->document_status === 'issued';
     }
 
-    
+
     /**
- * Réserve le prochain numéro de facture pour un utilisateur.
- *
- * IMPORTANT : cette méthode doit être appelée à l'intérieur
- * d'une transaction DB::transaction().
- */
-public static function generateInvoiceNumber(int $userId): string
-{
-    $year = now()->year;
+     * Réserve le prochain numéro de facture pour un utilisateur.
+     *
+     * IMPORTANT : cette méthode doit être appelée à l'intérieur
+     * d'une transaction DB::transaction().
+     */
+    public static function generateInvoiceNumber(int $userId): string
+    {
+        $year = now()->year;
 
-    // Verrouille la ligne utilisateur pour sérialiser les attributions,
-    // y compris lorsque le compteur de l'année n'existe pas encore.
-    DB::table('users')
-        ->where('id', $userId)
-        ->lockForUpdate()
-        ->first();
+        // Verrouille la ligne utilisateur pour sérialiser les attributions,
+        // y compris lorsque le compteur de l'année n'existe pas encore.
+        DB::table('users')
+            ->where('id', $userId)
+            ->lockForUpdate()
+            ->first();
 
-    $counter = DB::table('invoice_counters')
-        ->where('user_id', $userId)
-        ->where('year', $year)
-        ->first();
+        $counter = DB::table('invoice_counters')
+            ->where('user_id', $userId)
+            ->where('year', $year)
+            ->first();
 
-    $nextNumber = $counter
-        ? $counter->last_number + 1
-        : 1;
+        $nextNumber = $counter
+            ? $counter->last_number + 1
+            : 1;
 
-    if ($counter) {
-        DB::table('invoice_counters')
-            ->where('id', $counter->id)
-            ->update([
+        if ($counter) {
+            DB::table('invoice_counters')
+                ->where('id', $counter->id)
+                ->update([
+                    'last_number' => $nextNumber,
+                    'updated_at' => now(),
+                ]);
+        } else {
+            DB::table('invoice_counters')->insert([
+                'user_id' => $userId,
+                'year' => $year,
                 'last_number' => $nextNumber,
+                'created_at' => now(),
                 'updated_at' => now(),
             ]);
-    } else {
-        DB::table('invoice_counters')->insert([
-            'user_id' => $userId,
-            'year' => $year,
-            'last_number' => $nextNumber,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        }
+
+        return sprintf('FAC-%d-%04d', $year, $nextNumber);
     }
-
-    return sprintf('FAC-%d-%04d', $year, $nextNumber);
-}
-
 }

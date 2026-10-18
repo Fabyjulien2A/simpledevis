@@ -30,9 +30,18 @@ class DashboardController extends Controller
             ->count();
 
         $monthlyRevenue = Invoice::where('user_id', $userId)
+            ->where('document_status', 'issued')
             ->whereMonth('date', now()->month)
             ->whereYear('date', now()->year)
             ->sum('total_ttc');
+
+        $monthlyCreditNotes = \App\Models\CreditNote::where('user_id', $userId)
+            ->where('status', 'issued')
+            ->whereMonth('date', now()->month)
+            ->whereYear('date', now()->year)
+            ->sum('total_ttc');
+
+        $monthlyRevenue -= $monthlyCreditNotes;
 
         $amountCollected = Payment::whereHas(
             'invoice',
@@ -52,19 +61,24 @@ class DashboardController extends Controller
             });
 
         $overdueInvoicesCount = Invoice::where('user_id', $userId)
+            ->where('document_status', 'issued')
             ->where('status', '!=', 'payee')
+            ->whereDoesntHave('creditNotes', function ($query) {
+                $query->where('status', 'issued');
+            })
             ->whereNotNull('due_date')
             ->whereDate('due_date', '<', now())
             ->count();
 
         $unpaidInvoicesCount = Invoice::where('user_id', $userId)
-            ->whereIn(
-                'status',
-                [
-                    'non_payee',
-                    'partiellement_payee',
-                ]
-            )
+            ->where('document_status', 'issued')
+            ->whereIn('status', [
+                'non_payee',
+                'partiellement_payee',
+            ])
+            ->whereDoesntHave('creditNotes', function ($query) {
+                $query->where('status', 'issued');
+            })
             ->count();
 
         /*

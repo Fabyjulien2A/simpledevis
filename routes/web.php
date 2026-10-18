@@ -12,6 +12,7 @@ use App\Http\Controllers\SupplierInvoiceController;
 use App\Http\Controllers\SuperPdpController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ScheduleController;
+use App\Http\Controllers\CreditNoteController;
 
 /*
 |--------------------------------------------------------------------------
@@ -45,7 +46,7 @@ Route::view('/cgv', 'legal.cgv')
 |--------------------------------------------------------------------------
 */
 
-require __DIR__.'/auth.php';
+require __DIR__ . '/auth.php';
 
 /*
 |--------------------------------------------------------------------------
@@ -65,10 +66,17 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('verified')
         ->name('dashboard');
 
-        Route::get(
-    '/echeancier',
-    [ScheduleController::class, 'index']
-)->name('schedule.index');
+    Route::get(
+        '/echeancier',
+        [ScheduleController::class, 'index']
+    )->name('schedule.index');
+
+    // Création d'un avoir total depuis une facture définitive
+    Route::post('/invoices/{invoice}/credit-notes', [CreditNoteController::class, 'store'])
+        ->name('credit-notes.store');
+
+        Route::get('/credit-notes/{creditNote}/pdf', [CreditNoteController::class, 'pdf'])
+    ->name('credit-notes.pdf');
 
     /*
     |--------------------------------------------------------------------------
@@ -198,9 +206,9 @@ Route::middleware(['auth'])->group(function () {
     )->name('invoices.addPayment');
 
     Route::post(
-    '/invoices/{invoice}/finalize',
-    [InvoiceController::class, 'finalize']
-)->name('invoices.finalize');
+        '/invoices/{invoice}/finalize',
+        [InvoiceController::class, 'finalize']
+    )->name('invoices.finalize');
 
     /*
     |--------------------------------------------------------------------------
@@ -250,34 +258,34 @@ Route::middleware(['auth'])->group(function () {
     )->name('supplier-invoices.show');
 
     Route::get(
-    '/factures-recues/{supplierInvoice}/xml',
-    [SupplierInvoiceController::class, 'downloadXml']
-)->name('supplier-invoices.xml');
+        '/factures-recues/{supplierInvoice}/xml',
+        [SupplierInvoiceController::class, 'downloadXml']
+    )->name('supplier-invoices.xml');
 
-Route::get(
-    '/factures-recues/{supplierInvoice}/json',
-    [SupplierInvoiceController::class, 'downloadJson']
-)->name('supplier-invoices.json');
+    Route::get(
+        '/factures-recues/{supplierInvoice}/json',
+        [SupplierInvoiceController::class, 'downloadJson']
+    )->name('supplier-invoices.json');
 
-Route::get(
-    '/supplier-invoices/{supplierInvoice}/pdf',
-    [SupplierInvoiceController::class, 'downloadPdf']
-)->name('supplier-invoices.pdf');
+    Route::get(
+        '/supplier-invoices/{supplierInvoice}/pdf',
+        [SupplierInvoiceController::class, 'downloadPdf']
+    )->name('supplier-invoices.pdf');
 
-Route::post(
-    '/factures-recues/{supplierInvoice}/paiements',
-    [SupplierInvoiceController::class, 'storePayment']
-)->name('supplier-invoices.payments.store');
+    Route::post(
+        '/factures-recues/{supplierInvoice}/paiements',
+        [SupplierInvoiceController::class, 'storePayment']
+    )->name('supplier-invoices.payments.store');
 
-Route::put(
-    '/factures-recues/{supplierInvoice}/paiements/{payment}',
-    [SupplierInvoiceController::class, 'updatePayment']
-)->name('supplier-invoices.payments.update');
+    Route::put(
+        '/factures-recues/{supplierInvoice}/paiements/{payment}',
+        [SupplierInvoiceController::class, 'updatePayment']
+    )->name('supplier-invoices.payments.update');
 
-Route::delete(
-    '/factures-recues/{supplierInvoice}/paiements/{payment}',
-    [SupplierInvoiceController::class, 'destroyPayment']
-)->name('supplier-invoices.payments.destroy');
+    Route::delete(
+        '/factures-recues/{supplierInvoice}/paiements/{payment}',
+        [SupplierInvoiceController::class, 'destroyPayment']
+    )->name('supplier-invoices.payments.destroy');
 
     /*
     |--------------------------------------------------------------------------

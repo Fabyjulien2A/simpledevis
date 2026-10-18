@@ -6,20 +6,32 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('credit_note_counters', function (Blueprint $table) {
             $table->id();
+
+            // Compteur propre à chaque utilisateur
+            $table->foreignId('user_id')
+                ->constrained()
+                ->restrictOnDelete();
+
+            // Une séquence par année
+            $table->unsignedSmallInteger('year');
+
+            // Dernier numéro attribué
+            $table->unsignedInteger('last_number')->default(0);
+
             $table->timestamps();
+
+            // Un seul compteur par utilisateur et par année
+            $table->unique(
+                ['user_id', 'year'],
+                'credit_note_counters_user_year_unique'
+            );
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('credit_note_counters');

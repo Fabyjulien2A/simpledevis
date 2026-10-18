@@ -182,7 +182,19 @@ class InvoiceController extends Controller
             abort(403);
         }
 
+        // Interdire les paiements sur une facture annulée par avoir total
+        $hasTotalCreditNote = $invoice->creditNotes()
+            ->where('status', 'issued')
+            ->exists();
+
+        if ($hasTotalCreditNote) {
+            return redirect()
+                ->route('invoices.show', $invoice)
+                ->with('error', 'Impossible d’enregistrer un paiement : cette facture a été annulée par un avoir.');
+        }
+
         $invoice->load('payments');
+
 
         $validated = $request->validate([
             'amount' => ['required', 'numeric', 'min:0.01'],

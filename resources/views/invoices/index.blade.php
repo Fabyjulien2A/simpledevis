@@ -132,36 +132,41 @@
 
                         <tbody class="divide-y divide-gray-100">
                             @forelse($invoices as $invoice)
-                                @php
-                                    $remaining = max(
-                                        0,
-                                        (float) $invoice->total_ttc - (float) $invoice->amount_paid_calculated
-                                    );
+                            @php
+    $remaining = $invoice->remaining_amount;
 
-                                    $isDraft = $invoice->isDraft();
+    $hasTotalCreditNote = $invoice->creditNotes()
+        ->where('status', 'issued')
+        ->exists();
 
-                                    $isOverdue = ! $isDraft && $invoice->status !== 'payee'
-                                        && $invoice->due_date
-                                        && $invoice->due_date->isPast();
+    $isDraft = $invoice->isDraft();
 
-                                    $statusClasses = match (true) {
-                                        $isDraft => 'bg-amber-100 text-amber-800',
-                                        $isOverdue => 'bg-orange-100 text-orange-700',
-                                        $invoice->status === 'payee' => 'bg-green-100 text-green-700',
-                                        $invoice->status === 'partiellement_payee' => 'bg-yellow-100 text-yellow-700',
-                                        $invoice->status === 'non_payee' => 'bg-red-100 text-red-700',
-                                        default => 'bg-gray-100 text-gray-700',
-                                    };
+    $isOverdue = ! $isDraft
+        && ! $hasTotalCreditNote
+        && $invoice->status !== 'payee'
+        && $invoice->due_date
+        && $invoice->due_date->isPast();
 
-                                    $statusLabel = match (true) {
-                                        $isDraft => 'Brouillon',
-                                        $isOverdue => 'En retard',
-                                        $invoice->status === 'payee' => 'Payée',
-                                        $invoice->status === 'partiellement_payee' => 'Partielle',
-                                        $invoice->status === 'non_payee' => 'Non payée',
-                                        default => ucfirst($invoice->status),
-                                    };
-                                @endphp
+    $statusClasses = match (true) {
+        $isDraft => 'bg-amber-100 text-amber-800',
+        $hasTotalCreditNote => 'bg-purple-100 text-purple-800',
+        $isOverdue => 'bg-orange-100 text-orange-700',
+        $invoice->status === 'payee' => 'bg-green-100 text-green-700',
+        $invoice->status === 'partiellement_payee' => 'bg-yellow-100 text-yellow-700',
+        $invoice->status === 'non_payee' => 'bg-red-100 text-red-700',
+        default => 'bg-gray-100 text-gray-700',
+    };
+
+    $statusLabel = match (true) {
+        $isDraft => 'Brouillon',
+        $hasTotalCreditNote => 'Annulée par avoir',
+        $isOverdue => 'En retard',
+        $invoice->status === 'payee' => 'Payée',
+        $invoice->status === 'partiellement_payee' => 'Partielle',
+        $invoice->status === 'non_payee' => 'Non payée',
+        default => ucfirst($invoice->status),
+    };
+@endphp
 
                                 <tr class="transition hover:bg-gray-50">
                                     <td class="px-6 py-4">

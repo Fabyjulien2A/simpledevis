@@ -119,7 +119,7 @@
             </div>
 
             <div class="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
-                <p class="text-xs uppercase tracking-[0.2em] text-emerald-200">CA du mois</p>
+                <p class="text-xs uppercase tracking-[0.2em] text-emerald-200">Facturation nette TTC du mois</p>
                 <p class="mt-3 text-3xl font-bold text-white">{{ number_format($monthlyRevenue, 2, ',', ' ') }} €</p>
                 <p class="mt-1 text-sm text-emerald-100">Mois en cours</p>
             </div>
@@ -206,7 +206,7 @@
                 <div class="group rounded-3xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-6 shadow-sm shadow-emerald-100/50 transition duration-200 hover:-translate-y-1 hover:shadow-xl">
                     <div class="flex items-start justify-between">
                         <div>
-                            <p class="text-sm font-medium text-emerald-700">CA du mois</p>
+                            <p class="text-sm font-medium text-emerald-700">Facturation nette TTC du mois</p>
                             <p class="mt-3 text-3xl font-bold tracking-tight text-slate-900">
                                 {{ number_format($monthlyRevenue, 2, ',', ' ') }} €
                             </p>

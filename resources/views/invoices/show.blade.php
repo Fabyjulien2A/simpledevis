@@ -9,15 +9,22 @@
         </div>
     </x-slot>
 
-    @php
-        $isDraft = $invoice->isDraft();
-        $statusLabel = match ($invoice->status) {
+@php
+    $isDraft = $invoice->isDraft();
+
+    $hasTotalCreditNote = $invoice->creditNotes()
+        ->where('status', 'issued')
+        ->exists();
+
+    $statusLabel = $hasTotalCreditNote
+        ? 'Annulée par avoir'
+        : match ($invoice->status) {
             'payee' => 'Payée',
             'partiellement_payee' => 'Partiellement payée',
             'non_payee' => 'Non payée',
             default => ucfirst($invoice->status ?? 'Non renseigné'),
         };
-    @endphp
+@endphp
 
     <div class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50 py-10">
         <div class="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
@@ -36,6 +43,7 @@
                     </ul>
                 </div>
             @endif
+
 
             <div class="overflow-hidden rounded-3xl border bg-white shadow-lg">
                 <div class="bg-gradient-to-r from-indigo-600 to-purple-700 px-6 py-8 sm:px-8">
@@ -63,7 +71,7 @@
                     <div class="rounded-2xl bg-gray-50 p-4">
                         <p class="text-sm text-gray-500">Échéance</p>
                         <p class="mt-2 font-semibold text-gray-900">{{ $invoice->due_date?->format('d/m/Y') ?? 'Non définie' }}</p>
-                        @if(!$isDraft && $invoice->is_overdue)
+                        @if(!$isDraft && !$hasTotalCreditNote && $invoice->is_overdue)
                             <p class="mt-1 text-sm font-medium text-red-600">En retard</p>
                         @endif
                     </div>
@@ -94,6 +102,68 @@
                         </div>
                         <a href="{{ route('invoices.xml', $invoice) }}" class="rounded-xl bg-indigo-50 px-5 py-3 text-sm font-semibold text-indigo-700">{{ $invoice->is_electronic ? 'Télécharger le XML' : 'Générer le XML' }}</a>
                     </div>
+                </div>
+            @endif
+
+            {{-- Avoir total : uniquement pour une facture définitive --}}
+            @if(!$isDraft)
+                @php
+                    $creditNotes = $invoice->creditNotes()->orderByDesc('id')->get();
+                @endphp
+
+                <div class="rounded-3xl border bg-white p-6 shadow-lg">
+                    <h4 class="text-lg font-semibold text-gray-900">Avoirs</h4>
+
+                    @if($creditNotes->isNotEmpty())
+                        <p class="mt-2 text-sm text-gray-600">Un avoir a déjà été établi pour cette facture.</p>
+                        <div class="mt-4 space-y-3">
+                            @foreach($creditNotes as $creditNote)
+                                <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                                    <div>
+    <p class="font-semibold text-emerald-900">
+        {{ $creditNote->credit_note_number }}
+    </p>
+
+    <p class="text-sm text-emerald-800">
+        {{ $creditNote->date?->format('d/m/Y') ?? '—' }}
+        — {{ $creditNote->reason }}
+    </p>
+
+    <a href="{{ route('credit-notes.pdf', $creditNote) }}"
+       class="mt-3 inline-block rounded-lg px-4 py-2 text-sm font-semibold"
+       style="background-color: #047857; color: #ffffff;">
+        Télécharger l'avoir PDF
+    </a>
+</div>
+                                    <strong class="text-emerald-900">−{{ number_format((float) $creditNote->total_ttc, 2, ',', ' ') }} €</strong>
+                                </div>
+                            @endforeach
+                        </div>
+                        <p class="mt-3 text-sm text-gray-500">L'avoir n'efface pas les paiements déjà enregistrés. Un remboursement éventuel doit être suivi séparément.</p>
+                    @else
+                        <p class="mt-2 text-sm text-gray-600">Annuler intégralement cette facture par un avoir définitif. La facture d'origine sera conservée.</p>
+
+                        <form method="POST" action="{{ route('credit-notes.store', $invoice) }}" class="mt-5 space-y-4"
+                              onsubmit="return confirm('Créer un avoir total définitif pour cette facture ? Cette opération est irréversible.')">
+                            @csrf
+                            <div>
+                                <label for="credit_note_reason" class="block text-sm font-semibold text-gray-700">Motif de l'avoir *</label>
+                                <textarea id="credit_note_reason" name="reason" rows="3" maxlength="500" required
+                                          class="mt-2 w-full rounded-xl border-gray-200 text-sm"
+                                          placeholder="Ex. : Annulation de la prestation">{{ old('reason') }}</textarea>
+                            </div>
+                            <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-gray-50 p-4">
+                                <span class="text-sm font-medium text-gray-700">Montant de l'avoir total</span>
+                                <strong class="text-lg text-gray-900">{{ number_format((float) $invoice->total_ttc, 2, ',', ' ') }} € TTC</strong>
+                            </div>
+                            <button
+    type="submit"
+    style="display: block; background-color: #dc2626; color: #ffffff; padding: 14px 24px; border-radius: 12px; font-weight: 600; cursor: pointer; margin-top: 20px;"
+>
+    Créer un avoir total
+</button>
+                        </form>
+                    @endif
                 </div>
             @endif
 
@@ -207,6 +277,7 @@
                                 @endforeach
                             </tbody>
                         </table>
+
                     </div>
                 </div>
             @endif
