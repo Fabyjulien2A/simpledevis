@@ -28,8 +28,8 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('clients', function (Blueprint $table) {
-            $table->dropColumn(['client_type', 'siret', 'vat_number']);
-        });
+        // Retour arrière volontairement non destructif : ces colonnes peuvent
+        // préexister à cette migration. On les conserve avec leurs données,
+        // même si le rollback retire cette migration de l'historique.
     }
 };

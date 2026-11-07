@@ -50,6 +50,15 @@ class DashboardController extends Controller
             }
         )->sum('amount');
 
+        // Total des remboursements réellement effectués.
+        $totalRefunded = \App\Models\CreditNote::where('user_id', $userId)
+            ->where('status', 'issued')
+            ->whereNotNull('refunded_at')
+            ->sum('refunded_amount');
+
+        // Encaissements nets après remboursements.
+        $amountCollected -= $totalRefunded;
+
         /*
          * Le reste à encaisser peut être calculé par un attribut
          * du modèle Invoice. On conserve donc la collection.

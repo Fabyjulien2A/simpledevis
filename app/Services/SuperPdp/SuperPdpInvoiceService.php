@@ -29,7 +29,10 @@ public function __construct(
            $connection = $this->oauthService
         ->ensureValidAccessToken($connection);
 
-        $query = [];
+        $query = [
+            'direction' => 'in',
+            'order' => 'asc',
+        ];
 
         if ($startingAfterId !== null && $startingAfterId > 0) {
             $query['starting_after_id'] = $startingAfterId;
@@ -104,23 +107,33 @@ public function __construct(
         $startingAfterId = (int) $connection->last_invoice_id;
 
         do {
+            $pageStartingAfterId = $startingAfterId;
             $response = $this->fetchInvoices(
                 $connection,
                 $startingAfterId
             );
 
-            $summaries = $response['data'] ?? [];
+            $summaries = $response['data'] ?? null;
 
-            if (!is_array($summaries)) {
+            if (!is_array($summaries) || !array_is_list($summaries)) {
                 throw new RuntimeException(
                     'La liste des factures SUPER PDP est invalide.'
                 );
             }
 
+            $hasAfter = $response['has_after'] ?? null;
+            if (!is_bool($hasAfter)) {
+                throw new RuntimeException('La pagination SUPER PDP est invalide : has_after doit être un booléen.');
+            }
+
             foreach ($summaries as $summary) {
+                if (!is_array($summary)) {
+                    throw new RuntimeException('Un résumé de facture SUPER PDP est invalide.');
+                }
                 $superPdpInvoiceId = (int) ($summary['id'] ?? 0);
 
-                if ($superPdpInvoiceId <= 0) {
+                // Une page répétée ne doit ni réimporter les anciens IDs ni bloquer la boucle.
+                if ($superPdpInvoiceId <= $pageStartingAfterId) {
                     continue;
                 }
 
@@ -142,7 +155,9 @@ public function __construct(
                 $synchronizedCount++;
             }
 
-            $hasAfter = (bool) ($response['has_after'] ?? false);
+            if ($hasAfter && $startingAfterId <= $pageStartingAfterId) {
+                throw new RuntimeException('La pagination SUPER PDP ne permet aucune progression du curseur.');
+            }
         } while ($hasAfter === true);
 
         $connection->update([
@@ -160,6 +175,11 @@ public function __construct(
         SuperPdpConnection $connection,
         array $invoiceData
     ): SupplierInvoice {
+        // Contrôle avant la transaction : aucun document non entrant ne doit être écrit.
+        if (($invoiceData['direction'] ?? null) !== 'in') {
+            throw new RuntimeException('Seules les factures entrantes SUPER PDP peuvent être importées.');
+        }
+
         return DB::transaction(function () use (
             $connection,
             $invoiceData
@@ -215,7 +235,7 @@ public function __construct(
                         $invoiceData['company_id'] ?? null,
 
                     'direction' =>
-                        $invoiceData['direction'] ?? 'in',
+                        $invoiceData['direction'],
 
                     'invoice_number' =>
                         $electronicInvoice['number']

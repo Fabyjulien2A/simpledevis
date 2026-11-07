@@ -157,13 +157,38 @@
             padding-top: 15px;
             line-height: 1.6;
         }
+
+        .tax-details { margin-top: 5px; font-size: 10px; line-height: 1.4; overflow-wrap: break-word; }
+        .tax-table { font-size: 10px; }
+        .tax-table thead th { font-size: 10px; }
+        .items-table thead { display: table-header-group; }
+        .items-table td.text-right { white-space: nowrap; }
+        .invoice-lines { table-layout: fixed; }
+        .invoice-lines td.text-right { font-size: 10px; }
+        .totals-table, .notes { page-break-inside: avoid; }
     </style>
 </head>
 <body>
     <div class="document">
 
         @php
-            $companyName = $company->company_name ?? $company->name ?? auth()->user()->name;
+            // Les autres appelants de cette vue conservent leur parcours actuel
+            // tant qu'ils ne fournissent pas explicitement les données préparées.
+            $hasPreparedData = isset($pdfData);
+            $isDecimalPdf = $hasPreparedData && $pdfData['calculation_version'] === 'decimal-v1';
+            $formatAmount = $hasPreparedData
+                ? fn ($amount) => $decimalFormatter->format($amount)
+                : fn ($amount) => number_format($amount, 2, ',', ' ');
+            $pdfItems = $hasPreparedData ? collect($pdfData['items'])->map(fn ($item) => (object) $item) : $invoice->items;
+            $pdfPayments = $hasPreparedData ? collect($pdfData['payments'])->map(fn ($payment) => (object) $payment) : $invoice->payments;
+            $fiscalLabel = fn ($category, $code) => match ($category) {
+                'S' => 'TVA applicable (S)',
+                'E' => $code === 'VATEX-FR-FRANCHISE' ? 'Franchise en base (E)' : 'Autre exonération (E)',
+                'Z' => 'Taux zéro (Z)',
+                default => '',
+            };
+            $unitLabels = ['C62' => 'Unité', 'HUR' => 'Heure', 'MTR' => 'Mètre'];
+            $companyName = $company->company_name ?? $company->name ?? $invoice->user->name;
 
             $statusLabel = match ($invoice->status) {
                 'non_payee' => 'Non payée',
@@ -172,9 +197,9 @@
                 default => ucfirst($invoice->status),
             };
 
-            $tvaRate = $invoice->items->first()?->tva_rate ?? 0;
+            $tvaRate = $pdfItems->first()?->tva_rate ?? 0;
 
-            $lastPayment = $invoice->payments->sortByDesc('paid_at')->first();
+            $lastPayment = $pdfPayments->sortByDesc('paid_at')->first();
 
             $lastMethodLabel = $lastPayment
                 ? match ($lastPayment->method) {
@@ -242,7 +267,7 @@
 
                     <td class="invoice-block">
                         <div class="document-title">FACTURE</div>
-                        <div><strong>Numéro :</strong> {{ $invoice->invoice_number }}</div>
+                        <div><strong>Numéro :</strong> {{ $hasPreparedData ? $pdfData['invoice_number'] : $invoice->invoice_number }}</div>
                         <div><strong>Date d’émission :</strong> {{ $invoice->date->format('d/m/Y') }}</div>
                         <div><strong>Date de prestation :</strong> {{ $serviceDate->format('d/m/Y') }}</div>
 
@@ -300,12 +325,12 @@
                         <div class="box">
                             <div>
                                 <strong>Montant payé :</strong>
-                                {{ number_format($invoice->amount_paid_calculated, 2, ',', ' ') }} €
+                                {{ $formatAmount($hasPreparedData ? $pdfData['totals']['amount_paid'] : $invoice->amount_paid_calculated) }} €
                             </div>
 
                             <div>
                                 <strong>Reste à payer :</strong>
-                                {{ number_format($invoice->remaining_amount, 2, ',', ' ') }} €
+                                {{ $formatAmount($hasPreparedData ? $pdfData['totals']['remaining_amount'] : $invoice->remaining_amount) }} €
                             </div>
 
                             @if($lastMethodLabel)
@@ -326,24 +351,36 @@
 
         {{-- Tableau des lignes --}}
         <div class="section">
-            <table class="items-table">
+            <table class="items-table invoice-lines">
                 <thead>
                     <tr>
-                        <th>Description</th>
-                        <th class="text-right">Qté</th>
-                        <th class="text-right">Prix unitaire HT</th>
-                        <th class="text-right">TVA</th>
-                        <th class="text-right">Total HT</th>
+                        <th style="width: 44%">Description</th>
+                        <th style="width: 14%" class="text-right">{{ $isDecimalPdf ? 'Qté / unité' : 'Qté' }}</th>
+                        <th style="width: 16%" class="text-right">Prix unitaire HT</th>
+                        <th style="width: 11%" class="text-right">TVA</th>
+                        <th style="width: 15%" class="text-right">Total HT</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse($invoice->items as $item)
+                    @forelse($pdfItems as $item)
                         <tr>
-                            <td>{{ $item->description }}</td>
-                            <td class="text-right">{{ number_format($item->quantity, 2, ',', ' ') }}</td>
-                            <td class="text-right">{{ number_format($item->unit_price_ht, 2, ',', ' ') }} €</td>
-                            <td class="text-right">{{ number_format($item->tva_rate, 2, ',', ' ') }} %</td>
-                            <td class="text-right">{{ number_format($item->line_total_ht, 2, ',', ' ') }} €</td>
+                            <td>
+                                {{ $item->description }}
+                                @if($isDecimalPdf)
+                                    <div class="tax-details">
+                                        {{ $fiscalLabel($item->vat_category, $item->exemption_reason_code) }}
+                                        @if($item->exemption_reason_code)<br>Code : {{ $item->exemption_reason_code }}@endif
+                                        @if($item->exemption_reason)<br>Motif : {{ $item->exemption_reason }}@endif
+                                    </div>
+                                @endif
+                            </td>
+                            <td class="text-right">
+                                {{ $formatAmount($item->quantity) }}
+                                @if($isDecimalPdf)<div class="tax-details">{{ $unitLabels[$item->unit_code] }} ({{ $item->unit_code }})</div>@endif
+                            </td>
+                            <td class="text-right">{{ $formatAmount($item->unit_price_ht) }} €</td>
+                            <td class="text-right">{{ $formatAmount($item->tva_rate) }} %</td>
+                            <td class="text-right">{{ $formatAmount($item->line_total_ht) }} €</td>
                         </tr>
                     @empty
                         <tr>
@@ -354,30 +391,61 @@
             </table>
         </div>
 
+        @if($isDecimalPdf)
+            <div class="section">
+                <div class="box-title">Ventilation de TVA</div>
+                <table class="items-table tax-table">
+                    <thead>
+                        <tr><th>Traitement fiscal</th><th class="text-right">Taux</th><th class="text-right">Base HT</th><th class="text-right">Montant TVA</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach($pdfData['vat_breakdowns'] as $breakdown)
+                            <tr>
+                                <td>
+                                    {{ $fiscalLabel($breakdown['vat_category'], $breakdown['exemption_reason_code']) }}
+                                    @if($breakdown['exemption_reason_code'])<div class="tax-details">Code : {{ $breakdown['exemption_reason_code'] }}</div>@endif
+                                    @if($breakdown['exemption_reason'])<div class="tax-details">Motif : {{ $breakdown['exemption_reason'] }}</div>@endif
+                                </td>
+                                <td class="text-right">{{ $formatAmount($breakdown['vat_rate']) }} %</td>
+                                <td class="text-right">{{ $formatAmount($breakdown['taxable_amount']) }} €</td>
+                                <td class="text-right">{{ $formatAmount($breakdown['vat_amount']) }} €</td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
+
         {{-- Totaux --}}
         <div class="totals-wrapper">
             <table class="totals-table">
                 <tr>
                     <td class="label">Total HT</td>
-                    <td class="value">{{ number_format($invoice->subtotal_ht, 2, ',', ' ') }} €</td>
+                    <td class="value">{{ $formatAmount($hasPreparedData ? $pdfData['totals']['subtotal_ht'] : $invoice->subtotal_ht) }} €</td>
                 </tr>
                 <tr>
-                    <td class="label">TVA ({{ number_format($tvaRate, 2, ',', ' ') }} %)</td>
-                    <td class="value">{{ number_format($invoice->total_tva, 2, ',', ' ') }} €</td>
+                    <td class="label">
+                        @if($hasPreparedData)
+                            TVA totale
+                        @else
+                            TVA ({{ $formatAmount($tvaRate) }} %)
+                        @endif
+                    </td>
+                    <td class="value">{{ $formatAmount($hasPreparedData ? $pdfData['totals']['total_tva'] : $invoice->total_tva) }} €</td>
                 </tr>
                 <tr class="grand-total">
                     <td class="label">Total TTC</td>
-                    <td class="value">{{ number_format($invoice->total_ttc, 2, ',', ' ') }} €</td>
+                    <td class="value">{{ $formatAmount($hasPreparedData ? $pdfData['totals']['total_ttc'] : $invoice->total_ttc) }} €</td>
                 </tr>
             </table>
         </div>
 
         {{-- Historique des paiements --}}
-        @if($invoice->payments->count())
+        @if($pdfPayments->count())
             <div class="notes">
                 <strong>Paiements enregistrés :</strong><br><br>
 
-                @foreach($invoice->payments->sortBy('paid_at') as $payment)
+                @foreach($pdfPayments->sortBy('paid_at') as $payment)
                     @php
                         $methodLabel = match ($payment->method) {
                             'virement' => 'Virement',
@@ -389,8 +457,8 @@
                     @endphp
 
                     <div>
-                        - {{ $payment->paid_at->format('d/m/Y') }} :
-                        {{ number_format($payment->amount, 2, ',', ' ') }} € ({{ $methodLabel }})
+                        - {{ \Carbon\Carbon::parse($payment->paid_at)->format('d/m/Y') }} :
+                        {{ $formatAmount($payment->amount) }} € ({{ $methodLabel }})
                     </div>
                 @endforeach
             </div>

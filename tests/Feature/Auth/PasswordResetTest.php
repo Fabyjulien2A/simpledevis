@@ -1,7 +1,8 @@
+
 <?php
 
 use App\Models\User;
-use Illuminate\Auth\Notifications\ResetPassword;
+use App\Notifications\CustomResetPasswordNotification;
 use Illuminate\Support\Facades\Notification;
 
 test('reset password link screen can be rendered', function () {
@@ -17,7 +18,10 @@ test('reset password link can be requested', function () {
 
     $this->post('/forgot-password', ['email' => $user->email]);
 
-    Notification::assertSentTo($user, ResetPassword::class);
+    Notification::assertSentTo(
+        $user,
+        CustomResetPasswordNotification::class
+    );
 });
 
 test('reset password screen can be rendered', function () {
@@ -27,13 +31,19 @@ test('reset password screen can be rendered', function () {
 
     $this->post('/forgot-password', ['email' => $user->email]);
 
-    Notification::assertSentTo($user, ResetPassword::class, function ($notification) {
-        $response = $this->get('/reset-password/'.$notification->token);
+    Notification::assertSentTo(
+        $user,
+        CustomResetPasswordNotification::class,
+        function ($notification) {
+            $response = $this->get(
+                '/reset-password/'.$notification->token
+            );
 
-        $response->assertStatus(200);
+            $response->assertStatus(200);
 
-        return true;
-    });
+            return true;
+        }
+    );
 });
 
 test('password can be reset with valid token', function () {
@@ -43,18 +53,22 @@ test('password can be reset with valid token', function () {
 
     $this->post('/forgot-password', ['email' => $user->email]);
 
-    Notification::assertSentTo($user, ResetPassword::class, function ($notification) use ($user) {
-        $response = $this->post('/reset-password', [
-            'token' => $notification->token,
-            'email' => $user->email,
-            'password' => 'password',
-            'password_confirmation' => 'password',
-        ]);
+    Notification::assertSentTo(
+        $user,
+        CustomResetPasswordNotification::class,
+        function ($notification) use ($user) {
+            $response = $this->post('/reset-password', [
+                'token' => $notification->token,
+                'email' => $user->email,
+                'password' => 'password',
+                'password_confirmation' => 'password',
+            ]);
 
-        $response
-            ->assertSessionHasNoErrors()
-            ->assertRedirect(route('login'));
+            $response
+                ->assertSessionHasNoErrors()
+                ->assertRedirect(route('login'));
 
-        return true;
-    });
+            return true;
+        }
+    );
 });

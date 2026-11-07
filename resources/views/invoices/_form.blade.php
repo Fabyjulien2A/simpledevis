@@ -1,14 +1,31 @@
 @php
+    $isCreation = !isset($invoice);
+    $usesDecimalFields = $isCreation || $invoice->calculation_version === 'decimal-v1';
     $items = old('items');
 
     if (!$items && isset($invoice)) {
-        $items = $invoice->items->map(function ($item) {
-            return [
+        $items = $invoice->items->map(function ($item) use ($usesDecimalFields) {
+            $line = [
                 'description' => $item->description,
                 'quantity' => $item->quantity,
                 'unit_price_ht' => $item->unit_price_ht,
                 'tva_rate' => $item->tva_rate,
             ];
+            if ($usesDecimalFields) {
+                $line += [
+                    'unit_code' => $item->unit_code,
+                    'exemption_reason_code' => $item->exemption_reason_code,
+                    'exemption_reason' => $item->exemption_reason,
+                    'tax_treatment' => match ($item->vat_category) {
+                        'S' => 'taxable',
+                        'E' => $item->exemption_reason_code === 'VATEX-FR-FRANCHISE' ? 'franchise' : 'exempt',
+                        'Z' => 'zero_rated',
+                        default => '',
+                    },
+                ];
+            }
+
+            return $line;
         })->toArray();
     }
 
@@ -25,6 +42,16 @@
 @endphp
 
 <div class="bg-white rounded-2xl shadow p-6 space-y-6">
+
+    @if($errors->any())
+        <div class="rounded-lg bg-red-50 p-4 text-red-700" role="alert">
+            <ul class="list-disc pl-5">
+                @foreach($errors->all() as $message)
+                    <li>{{ $message }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
 
     {{-- Client --}}
     <div>
@@ -106,6 +133,13 @@
 
         <div id="invoice-lines" class="space-y-4">
             @foreach($items as $index => $item)
+                @php
+                    // Normalisation décimale textuelle, sans conversion en float.
+                    $selectedRate = (string)($item['tva_rate'] ?? '');
+                    if (str_contains($selectedRate, '.')) {
+                        $selectedRate = rtrim(rtrim($selectedRate, '0'), '.');
+                    }
+                @endphp
                 <div class="invoice-line rounded-xl border border-gray-200 bg-gray-50 p-4">
                     <div class="grid gap-4 md:grid-cols-12">
 
@@ -150,6 +184,14 @@
                             <label class="block text-sm font-medium text-gray-700 mb-1">
                                 TVA %
                             </label>
+                            @if($usesDecimalFields)
+                                <select name="items[{{ $index }}][tva_rate]" class="w-full rounded-lg border-gray-300 invoice-tva">
+                                    <option value="">Choisir un taux</option>
+                                    @foreach(['20' => '20 %', '10' => '10 %', '5.5' => '5,5 %', '2.1' => '2,1 %', '0' => '0 % (hors TVA applicable)'] as $rate => $label)
+                                        <option value="{{ $rate }}" @selected($selectedRate === (string)$rate)>{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            @else
                             <input
                                 type="number"
                                 step="0.01"
@@ -157,6 +199,7 @@
                                 name="items[{{ $index }}][tva_rate]"
                                 value="{{ $item['tva_rate'] ?? 20 }}"
                                 class="w-full rounded-lg border-gray-300 invoice-tva">
+                            @endif
                         </div>
 
                         <div class="md:col-span-1 flex items-end">
@@ -168,8 +211,49 @@
                         </div>
                     </div>
 
+                    @if($usesDecimalFields)
+                        <div class="mt-4 grid gap-4 md:grid-cols-2">
+                            <div>
+                                <label class="mb-1 block text-sm font-medium">Unité de facturation</label>
+                                <select name="items[{{ $index }}][unit_code]" class="invoice-unit w-full rounded-lg border-gray-300" required>
+                                    <option value="">Choisir une unité</option>
+                                    @foreach(['C62' => 'Unité', 'HUR' => 'Heure', 'MTR' => 'Mètre'] as $code => $label)
+                                        <option value="{{ $code }}" @selected(($item['unit_code'] ?? '') === $code)>{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-sm font-medium">Traitement fiscal</label>
+                                <select name="items[{{ $index }}][tax_treatment]" class="invoice-treatment w-full rounded-lg border-gray-300" required>
+                                    <option value="">Choisir un traitement</option>
+                                    @foreach(['taxable' => 'TVA applicable', 'franchise' => 'Franchise en base', 'exempt' => 'Autre exonération', 'zero_rated' => 'Taux zéro'] as $code => $label)
+                                        <option value="{{ $code }}" @selected(($item['tax_treatment'] ?? '') === $code)>{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="invoice-exemption-fields md:col-span-2 grid gap-4 md:grid-cols-2">
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium">Code du motif d’exonération</label>
+                                    <input type="text" name="items[{{ $index }}][exemption_reason_code]" value="{{ $item['exemption_reason_code'] ?? '' }}" maxlength="255" class="invoice-exemption-code w-full rounded-lg border-gray-300">
+                                    <p class="mt-1 text-xs text-gray-500">La franchise utilise le code VATEX-FR-FRANCHISE.</p>
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium">Justification de l’exonération</label>
+                                    <textarea name="items[{{ $index }}][exemption_reason]" class="invoice-exemption-reason w-full rounded-lg border-gray-300" rows="2">{{ $item['exemption_reason'] ?? '' }}</textarea>
+                                    <p class="mt-1 text-xs text-gray-500">Pour une autre exonération, renseignez au moins un code ou une justification.</p>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
+                    @foreach(['description', 'quantity', 'unit_price_ht', 'tva_rate', 'unit_code', 'tax_treatment', 'vat_category', 'exemption_reason_code', 'exemption_reason', 'line_total_ht'] as $field)
+                        @error("items.$index.$field")
+                            <p class="invoice-field-error mt-1 text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                    @endforeach
+
                     <div class="mt-3 text-right text-sm text-gray-500">
-                        Total ligne HT :
+                        {{ $usesDecimalFields ? 'Estimation HT de la ligne :' : 'Total ligne HT :' }}
                         <span class="font-semibold text-gray-900 line-total">0,00 €</span>
                     </div>
                 </div>
@@ -183,6 +267,12 @@
 
     {{-- Totaux --}}
     <div class="rounded-2xl border border-gray-200 bg-gray-50 p-5">
+        @if($usesDecimalFields)
+            <p class="mb-4 text-sm text-amber-900" role="status">
+                Aperçu indicatif : les montants exacts sont calculés par le serveur à l’enregistrement.
+                Des écarts d’arrondi sont possibles, notamment avec plusieurs taux de TVA ou de petits montants.
+            </p>
+        @endif
         <div class="flex justify-end">
             <div class="w-full max-w-sm space-y-2 text-sm">
                 <div class="flex justify-between">
@@ -257,6 +347,7 @@
     document.addEventListener('DOMContentLoaded', function () {
         const linesContainer = document.getElementById('invoice-lines');
         const addButton = document.getElementById('add-invoice-line');
+        const usesDecimalFields = @json($usesDecimalFields);
 
         function formatMoney(value) {
             return new Intl.NumberFormat('fr-FR', {
@@ -273,17 +364,33 @@
                 line.querySelector('.invoice-quantity').name = `items[${index}][quantity]`;
                 line.querySelector('.invoice-price').name = `items[${index}][unit_price_ht]`;
                 line.querySelector('.invoice-tva').name = `items[${index}][tva_rate]`;
+                if (usesDecimalFields) {
+                    for (const [selector, field] of [
+                        ['.invoice-unit', 'unit_code'], ['.invoice-treatment', 'tax_treatment'],
+                        ['.invoice-exemption-code', 'exemption_reason_code'], ['.invoice-exemption-reason', 'exemption_reason']
+                    ]) {
+                        line.querySelector(selector).name = `items[${index}][${field}]`;
+                    }
+                }
             });
         }
 
         function calculateTotals() {
             let totalHt = 0;
             let totalTva = 0;
+            let complete = true;
 
             linesContainer.querySelectorAll('.invoice-line').forEach(line => {
                 const quantity = parseFloat(line.querySelector('.invoice-quantity').value) || 0;
                 const price = parseFloat(line.querySelector('.invoice-price').value) || 0;
                 const tvaRate = parseFloat(line.querySelector('.invoice-tva').value) || 0;
+                if (usesDecimalFields && (!line.querySelector('.invoice-treatment').value
+                    || !line.querySelector('.invoice-unit').value
+                    || !line.querySelector('.invoice-quantity').value
+                    || !line.querySelector('.invoice-price').value
+                    || line.querySelector('.invoice-tva').value === '')) {
+                    complete = false;
+                }
 
                 const lineHt = quantity * price;
                 const lineTva = lineHt * (tvaRate / 100);
@@ -294,15 +401,36 @@
                 line.querySelector('.line-total').textContent = formatMoney(lineHt);
             });
 
-            document.getElementById('total-ht').textContent = formatMoney(totalHt);
-            document.getElementById('total-tva').textContent = formatMoney(totalTva);
-            document.getElementById('total-ttc').textContent = formatMoney(totalHt + totalTva);
+            document.getElementById('total-ht').textContent = complete ? formatMoney(totalHt) : 'À compléter';
+            document.getElementById('total-tva').textContent = complete ? formatMoney(totalTva) : 'À compléter';
+            document.getElementById('total-ttc').textContent = complete ? formatMoney(totalHt + totalTva) : 'À compléter';
+        }
+
+        function updateTreatment(line, changed = false) {
+            if (!usesDecimalFields) return;
+            const treatment = line.querySelector('.invoice-treatment').value;
+            const exempt = treatment === 'franchise' || treatment === 'exempt';
+            line.querySelector('.invoice-exemption-fields').hidden = !exempt;
+            const code = line.querySelector('.invoice-exemption-code');
+            code.readOnly = treatment === 'franchise';
+            if (changed) {
+                line.querySelector('.invoice-exemption-reason').value = '';
+                code.value = treatment === 'franchise' ? 'VATEX-FR-FRANCHISE' : '';
+                line.querySelector('.invoice-tva').value = treatment && treatment !== 'taxable' ? '0' : '';
+            }
         }
 
         function bindLineEvents(line) {
-            line.querySelectorAll('input').forEach(input => {
+            line.querySelectorAll('input, select, textarea').forEach(input => {
                 input.addEventListener('input', calculateTotals);
             });
+            if (usesDecimalFields) {
+                line.querySelector('.invoice-treatment').addEventListener('change', function () {
+                    updateTreatment(line, true);
+                    calculateTotals();
+                });
+                updateTreatment(line);
+            }
 
             line.querySelector('.remove-invoice-line').addEventListener('click', function () {
                 const lines = linesContainer.querySelectorAll('.invoice-line');
@@ -324,7 +452,14 @@
             newLine.querySelector('.invoice-description').value = '';
             newLine.querySelector('.invoice-quantity').value = 1;
             newLine.querySelector('.invoice-price').value = '';
-            newLine.querySelector('.invoice-tva').value = 20;
+            newLine.querySelector('.invoice-tva').value = usesDecimalFields ? '' : 20;
+            newLine.querySelectorAll('.invoice-field-error').forEach(error => error.remove());
+            if (usesDecimalFields) {
+                newLine.querySelector('.invoice-unit').value = '';
+                newLine.querySelector('.invoice-treatment').value = '';
+                newLine.querySelector('.invoice-exemption-code').value = '';
+                newLine.querySelector('.invoice-exemption-reason').value = '';
+            }
             newLine.querySelector('.line-total').textContent = '0,00 €';
 
             linesContainer.appendChild(newLine);

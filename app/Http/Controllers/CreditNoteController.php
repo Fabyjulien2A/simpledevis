@@ -100,31 +100,62 @@ class CreditNoteController extends Controller
             );
     }
 
+    public function markAsRefunded(CreditNote $creditNote): RedirectResponse
+    {
+        if ((int) $creditNote->user_id !== (int) auth()->id()) {
+            abort(403);
+        }
+
+        if ($creditNote->status !== 'issued') {
+            abort(422, 'Cet avoir ne peut pas être remboursé.');
+        }
+
+        if ($creditNote->refunded_at !== null) {
+            return back()->with('error', 'Cet avoir est déjà marqué comme remboursé.');
+        }
+
+        $creditNote->load('invoice');
+
+        $amountPaid = (float) $creditNote->invoice->payments()->sum('amount');
+
+        if ($amountPaid <= 0) {
+            return back()->with('error', 'Aucun paiement à rembourser.');
+        }
+
+        $creditNote->update([
+            'refunded_at' => now()->toDateString(),
+            'refunded_amount' => min($amountPaid, (float) $creditNote->total_ttc),
+            'refund_method' => 'autre',
+        ]);
+
+        return back()->with('success', 'Remboursement enregistré avec succès.');
+    }
+
     public function pdf(CreditNote $creditNote)
-{
-    // Vérifier que l'avoir appartient à l'utilisateur connecté
-    abort_unless(
-        $creditNote->user_id === auth()->id(),
-        403
-    );
+    {
+        // Vérifier que l'avoir appartient à l'utilisateur connecté
+        abort_unless(
+            $creditNote->user_id === auth()->id(),
+            403
+        );
 
-    // Charger la facture d'origine et ses informations
-    $creditNote->load([
-        'invoice.client',
-        'invoice.items',
-    ]);
+        // Charger la facture d'origine et ses informations
+        $creditNote->load([
+            'invoice.client',
+            'invoice.items',
+        ]);
 
-    // Récupérer les informations de l'entreprise
-    $company = auth()->user()->company;
+        // Récupérer les informations de l'entreprise
+        $company = auth()->user()->company;
 
-    // Générer le PDF
-    $pdf = Pdf::loadView('credit-notes.pdf', [
-        'creditNote' => $creditNote,
-        'company' => $company,
-    ]);
+        // Générer le PDF
+        $pdf = Pdf::loadView('credit-notes.pdf', [
+            'creditNote' => $creditNote,
+            'company' => $company,
+        ]);
 
-    return $pdf->download(
-        'avoir-' . $creditNote->credit_note_number . '.pdf'
-    );
-}
+        return $pdf->download(
+            'avoir-' . $creditNote->credit_note_number . '.pdf'
+        );
+    }
 }

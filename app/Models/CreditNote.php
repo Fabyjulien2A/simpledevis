@@ -18,6 +18,9 @@ class CreditNote extends Model
         'total_tva',
         'total_ttc',
         'notes',
+        'refunded_at',
+        'refunded_amount',
+        'refund_method',
     ];
 
     protected $casts = [
@@ -25,6 +28,8 @@ class CreditNote extends Model
         'subtotal_ht' => 'decimal:2',
         'total_tva' => 'decimal:2',
         'total_ttc' => 'decimal:2',
+        'refunded_at' => 'date',
+        'refunded_amount' => 'decimal:2',
     ];
 
     /**

@@ -78,6 +78,9 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/credit-notes/{creditNote}/pdf', [CreditNoteController::class, 'pdf'])
     ->name('credit-notes.pdf');
 
+    Route::post('/credit-notes/{creditNote}/refund', [CreditNoteController::class, 'markAsRefunded'])
+    ->name('credit-notes.refund');
+
     /*
     |--------------------------------------------------------------------------
     | Profil utilisateur

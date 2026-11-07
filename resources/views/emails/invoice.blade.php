@@ -17,16 +17,16 @@
     </p>
 
     <p>
-        <strong>Numéro :</strong> {{ $invoice->invoice_number }}<br>
+        <strong>Numéro :</strong> {{ $pdfData['invoice_number'] }}<br>
         <strong>Date :</strong> {{ $invoice->date->format('d/m/Y') }}<br>
-        <strong>Montant TTC :</strong> {{ number_format($invoice->total_ttc, 2) }} €
+        <strong>Montant TTC :</strong> {{ $decimalFormatter->format($pdfData['totals']['total_ttc']) }} €
     </p>
 
     <p>
-        @if(($invoice->total_ttc - ($invoice->amount_paid ?? 0)) > 0)
+        @if($hasRemainingAmount)
             Le montant restant dû est de 
             <strong>
-                {{ number_format($invoice->total_ttc - ($invoice->amount_paid ?? 0), 2) }} €
+                {{ $decimalFormatter->format($pdfData['totals']['remaining_amount']) }} €
             </strong>.
         @else
             Cette facture est entièrement réglée.

@@ -25,6 +25,10 @@ class InvoiceItem extends Model
         'unit_price_ht',
         'tva_rate',
         'line_total_ht',
+        'vat_category',
+        'exemption_reason_code',
+        'exemption_reason',
+        'unit_code',
     ];
 
     /**

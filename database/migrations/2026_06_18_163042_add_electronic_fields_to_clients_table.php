@@ -11,17 +11,29 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('clients', function (Blueprint $table) {
-            $table->string('client_type')->default('individual')->after('company_name');
-            $table->string('siret')->nullable()->after('client_type');
-            $table->string('vat_number')->nullable()->after('siret');
-        });
+        if (! Schema::hasColumn('clients', 'client_type')) {
+            Schema::table('clients', function (Blueprint $table) {
+                $table->string('client_type')->default('individual')->after('company_name');
+            });
+        }
+
+        if (! Schema::hasColumn('clients', 'siret')) {
+            Schema::table('clients', function (Blueprint $table) {
+                $table->string('siret')->nullable()->after('client_type');
+            });
+        }
+
+        if (! Schema::hasColumn('clients', 'vat_number')) {
+            Schema::table('clients', function (Blueprint $table) {
+                $table->string('vat_number')->nullable()->after('siret');
+            });
+        }
     }
 
     public function down(): void
     {
-        Schema::table('clients', function (Blueprint $table) {
-            $table->dropColumn(['client_type', 'siret', 'vat_number']);
-        });
+        // Retour arrière volontairement non destructif : ces colonnes peuvent
+        // préexister à cette migration. On les conserve avec leurs données,
+        // même si le rollback retire cette migration de l'historique.
     }
 };

@@ -7,7 +7,10 @@ use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Payment;
 use App\Services\InvoiceXmlGenerator;
-use Barryvdh\DomPDF\Facade\Pdf;
+use App\Services\InvoiceLinePreparationService;
+use App\Services\InvoicePdfRenderer;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -15,6 +18,9 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\View\View;
 use App\Models\Client;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Validator;
+use Brick\Math\BigDecimal;
 
 class InvoiceController extends Controller
 {
@@ -88,19 +94,24 @@ class InvoiceController extends Controller
         };
     }
 
-    public function pdf(Invoice $invoice): Response
+    public function pdf(Invoice $invoice, InvoicePdfRenderer $renderer): Response
     {
         if ($invoice->user_id !== auth()->id()) {
             abort(403);
         }
 
-        $invoice->load('client', 'items', 'quote', 'payments');
+        // Autoriser avant la préparation et le rendu, y compris avec un modèle obsolète.
+        $invoice = Invoice::whereKey($invoice->id)->firstOrFail();
+        abort_unless($invoice->user_id === auth()->id(), 403);
+        $document = $renderer->generate($invoice);
 
-        $company = auth()->user()->company;
-
-        $pdf = Pdf::loadView('invoices.pdf', compact('invoice', 'company'));
-
-        return $pdf->download('facture-' . $invoice->invoice_number . '.pdf');
+        // Même disposition et même nom de repli que le téléchargement DomPDF.
+        return new Response($document['content'], 200, [
+            'Content-Type' => $document['mime'],
+            'Content-Disposition' => HeaderUtils::makeDisposition('attachment', $document['filename'],
+                str_replace('%', '', Str::ascii($document['filename']))),
+            'Content-Length' => strlen($document['content']),
+        ]);
     }
 
     public function sendByEmail(Invoice $invoice): RedirectResponse
@@ -109,7 +120,9 @@ class InvoiceController extends Controller
             abort(403);
         }
 
-        $invoice->load('client', 'items', 'quote', 'user');
+        $invoice = Invoice::whereKey($invoice->id)->firstOrFail();
+        abort_unless($invoice->user_id === auth()->id(), 403);
+        $invoice->load('client');
 
         if (empty($invoice->client->email)) {
             return redirect()
@@ -130,32 +143,38 @@ class InvoiceController extends Controller
             abort(403);
         }
 
-        $remaining = max(
-            0,
-            (float) $invoice->total_ttc - (float) $invoice->amount_paid_calculated
-        );
+        return DB::transaction(function () use ($invoice) {
+            $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            abort_unless($invoice->user_id === auth()->id(), 403);
+            abort_unless($invoice->isIssued(), 409, 'Un paiement nécessite une facture définitive.');
 
-        if ($remaining <= 0) {
+            $remaining = max(
+                0,
+                (float) $invoice->total_ttc - (float) $invoice->amount_paid_calculated
+            );
+
+            if ($remaining <= 0) {
+                return redirect()
+                    ->route('invoices.show', $invoice)
+                    ->with('error', 'Cette facture est déjà entièrement payée.');
+            }
+
+            Payment::create([
+                'invoice_id' => $invoice->id,
+                'amount' => $remaining,
+                'method' => 'virement',
+                'paid_at' => now()->toDateString(),
+            ]);
+
+            $invoice->update([
+                'status' => 'payee',
+                'amount_paid' => $invoice->total_ttc,
+            ]);
+
             return redirect()
                 ->route('invoices.show', $invoice)
-                ->with('error', 'Cette facture est déjà entièrement payée.');
-        }
-
-        Payment::create([
-            'invoice_id' => $invoice->id,
-            'amount' => $remaining,
-            'method' => 'virement',
-            'paid_at' => now()->toDateString(),
-        ]);
-
-        $invoice->update([
-            'status' => 'payee',
-            'amount_paid' => $invoice->total_ttc,
-        ]);
-
-        return redirect()
-            ->route('invoices.show', $invoice)
-            ->with('success', 'La facture a été marquée comme payée.');
+                ->with('success', 'La facture a été marquée comme payée.');
+        });
     }
 
     public function markAsUnpaid(Invoice $invoice): RedirectResponse
@@ -164,12 +183,15 @@ class InvoiceController extends Controller
             abort(403);
         }
 
-        $invoice->payments()->delete();
+        DB::transaction(function () use ($invoice) {
+            $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            abort_unless($invoice->user_id === auth()->id(), 403);
+            abort_if($invoice->isDraft() && $invoice->calculation_version === 'decimal-v1', 409,
+                'Un brouillon decimal-v1 ne peut pas être marqué comme impayé.');
 
-        $invoice->update([
-            'status' => 'non_payee',
-            'amount_paid' => 0,
-        ]);
+            $invoice->payments()->delete();
+            $invoice->update(['status' => 'non_payee', 'amount_paid' => 0]);
+        });
 
         return redirect()
             ->route('invoices.show', $invoice)
@@ -182,65 +204,71 @@ class InvoiceController extends Controller
             abort(403);
         }
 
-        // Interdire les paiements sur une facture annulée par avoir total
-        $hasTotalCreditNote = $invoice->creditNotes()
-            ->where('status', 'issued')
-            ->exists();
+        return DB::transaction(function () use ($request, $invoice) {
+            $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            abort_unless($invoice->user_id === auth()->id(), 403);
+            abort_unless($invoice->isIssued(), 409, 'Un paiement nécessite une facture définitive.');
 
-        if ($hasTotalCreditNote) {
+            // Interdire les paiements sur une facture annulée par avoir total
+            $hasTotalCreditNote = $invoice->creditNotes()
+                ->where('status', 'issued')
+                ->exists();
+
+            if ($hasTotalCreditNote) {
+                return redirect()
+                    ->route('invoices.show', $invoice)
+                    ->with('error', 'Impossible d’enregistrer un paiement : cette facture a été annulée par un avoir.');
+            }
+
+            $invoice->load('payments');
+
+
+            $validated = $request->validate([
+                'amount' => ['required', 'numeric', 'min:0.01'],
+                'method' => ['required', 'string'],
+            ]);
+
+            $currentPaid = (float) $invoice->payments->sum('amount');
+            $newTotalPaid = $currentPaid + (float) $validated['amount'];
+
+            if ($newTotalPaid > (float) $invoice->total_ttc) {
+                return redirect()
+                    ->route('invoices.show', $invoice)
+                    ->with('error', 'Le paiement dépasse le montant total de la facture.');
+            }
+
+            Payment::create([
+                'invoice_id' => $invoice->id,
+                'amount' => $validated['amount'],
+                'method' => $validated['method'],
+                'paid_at' => now()->toDateString(),
+            ]);
+
+            $invoice->refresh()->load('payments');
+
+            $updatedPaid = (float) $invoice->payments->sum('amount');
+
+            if ($updatedPaid <= 0) {
+                $invoice->update([
+                    'status' => 'non_payee',
+                    'amount_paid' => 0,
+                ]);
+            } elseif ($updatedPaid >= (float) $invoice->total_ttc) {
+                $invoice->update([
+                    'status' => 'payee',
+                    'amount_paid' => $updatedPaid,
+                ]);
+            } else {
+                $invoice->update([
+                    'status' => 'partiellement_payee',
+                    'amount_paid' => $updatedPaid,
+                ]);
+            }
+
             return redirect()
                 ->route('invoices.show', $invoice)
-                ->with('error', 'Impossible d’enregistrer un paiement : cette facture a été annulée par un avoir.');
-        }
-
-        $invoice->load('payments');
-
-
-        $validated = $request->validate([
-            'amount' => ['required', 'numeric', 'min:0.01'],
-            'method' => ['required', 'string'],
-        ]);
-
-        $currentPaid = (float) $invoice->payments->sum('amount');
-        $newTotalPaid = $currentPaid + (float) $validated['amount'];
-
-        if ($newTotalPaid > (float) $invoice->total_ttc) {
-            return redirect()
-                ->route('invoices.show', $invoice)
-                ->with('error', 'Le paiement dépasse le montant total de la facture.');
-        }
-
-        Payment::create([
-            'invoice_id' => $invoice->id,
-            'amount' => $validated['amount'],
-            'method' => $validated['method'],
-            'paid_at' => now()->toDateString(),
-        ]);
-
-        $invoice->refresh()->load('payments');
-
-        $updatedPaid = (float) $invoice->payments->sum('amount');
-
-        if ($updatedPaid <= 0) {
-            $invoice->update([
-                'status' => 'non_payee',
-                'amount_paid' => 0,
-            ]);
-        } elseif ($updatedPaid >= (float) $invoice->total_ttc) {
-            $invoice->update([
-                'status' => 'payee',
-                'amount_paid' => $updatedPaid,
-            ]);
-        } else {
-            $invoice->update([
-                'status' => 'partiellement_payee',
-                'amount_paid' => $updatedPaid,
-            ]);
-        }
-
-        return redirect()
-            ->route('invoices.show', $invoice)
-            ->with('success', 'Paiement enregistré avec succès.');
+                ->with('success', 'Paiement enregistré avec succès.');
+        });
     }
 
     public function duplicate(Invoice $invoice): RedirectResponse
@@ -321,7 +349,7 @@ class InvoiceController extends Controller
         return view('invoices.create', compact('clients'));
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, InvoiceLinePreparationService $linePreparation): RedirectResponse
     {
         $validated = $request->validate([
             'action' => ['required', 'in:draft,issue'],
@@ -331,28 +359,16 @@ class InvoiceController extends Controller
             'notes' => ['nullable', 'string'],
 
             'items' => ['required', 'array', 'min:1'],
-            'items.*.description' => ['required', 'string'],
-            'items.*.quantity' => ['required', 'numeric', 'min:0.01'],
-            'items.*.unit_price_ht' => ['required', 'numeric', 'min:0'],
-            'items.*.tva_rate' => ['required', 'numeric', 'min:0'],
+            'items.*' => ['required', 'array'],
+            'items.*.tax_treatment' => ['required', 'string', 'in:taxable,franchise,exempt,zero_rated'],
         ]);
 
         $client = Client::where('user_id', auth()->id())
             ->findOrFail($validated['client_id']);
 
-        DB::transaction(function () use ($validated, $client) {
-            $subtotalHt = 0;
-            $totalTva = 0;
+        $prepared = $linePreparation->prepare($this->translateFiscalItems($request->input('items')));
 
-            foreach ($validated['items'] as $item) {
-                $lineHt = (float) $item['quantity'] * (float) $item['unit_price_ht'];
-                $lineTva = $lineHt * ((float) $item['tva_rate'] / 100);
-
-                $subtotalHt += $lineHt;
-                $totalTva += $lineTva;
-            }
-
-            $totalTtc = $subtotalHt + $totalTva;
+        DB::transaction(function () use ($validated, $client, $prepared) {
 
             $invoice = Invoice::create([
                 'user_id' => auth()->id(),
@@ -367,24 +383,16 @@ class InvoiceController extends Controller
                 'document_status' => $validated['action'] === 'issue'
                     ? 'issued'
                     : 'draft',
-                'subtotal_ht' => $subtotalHt,
-                'total_tva' => $totalTva,
-                'total_ttc' => $totalTtc,
+                'calculation_version' => 'decimal-v1',
+                'subtotal_ht' => $prepared['totals']['total_ht'],
+                'total_tva' => $prepared['totals']['total_vat'],
+                'total_ttc' => $prepared['totals']['total_ttc'],
                 'amount_paid' => 0,
                 'notes' => $validated['notes'] ?? null,
             ]);
 
-            foreach ($validated['items'] as $item) {
-                $lineHt = (float) $item['quantity'] * (float) $item['unit_price_ht'];
-
-                InvoiceItem::create([
-                    'invoice_id' => $invoice->id,
-                    'description' => $item['description'],
-                    'quantity' => $item['quantity'],
-                    'unit_price_ht' => $item['unit_price_ht'],
-                    'tva_rate' => $item['tva_rate'],
-                    'line_total_ht' => $lineHt,
-                ]);
+            foreach ($prepared['items'] as $item) {
+                $invoice->items()->create($item);
             }
         });
 
@@ -418,7 +426,7 @@ class InvoiceController extends Controller
         return view('invoices.edit', compact('invoice', 'clients'));
     }
 
-    public function update(Request $request, Invoice $invoice): RedirectResponse
+    public function update(Request $request, Invoice $invoice, InvoiceLinePreparationService $linePreparation): RedirectResponse
     {
         if ($invoice->user_id !== auth()->id()) {
             abort(403);
@@ -428,23 +436,64 @@ class InvoiceController extends Controller
             abort(403, 'Une facture définitive ne peut pas être modifiée.');
         }
 
-        $validated = $request->validate([
-            'client_id' => ['required', 'exists:clients,id'],
-            'date' => ['required', 'date'],
-            'due_date' => ['nullable', 'date', 'after_or_equal:date'],
-            'notes' => ['nullable', 'string'],
+        DB::transaction(function () use ($request, $invoice, $linePreparation) {
+            // Le modèle issu du route binding peut être périmé : ne rien écrire avant relecture.
+            $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            abort_unless($invoice->user_id === auth()->id(), 403);
+            abort_unless($invoice->isDraft(), 403, 'Seul un brouillon peut être modifié.');
+            abort_unless(in_array($invoice->calculation_version, [null, 'decimal-v1'], true), 409,
+                'Cette version de calcul n’est pas prise en charge pour la modification.');
 
-            'items' => ['required', 'array', 'min:1'],
-            'items.*.description' => ['required', 'string'],
-            'items.*.quantity' => ['required', 'numeric', 'min:0.01'],
-            'items.*.unit_price_ht' => ['required', 'numeric', 'min:0'],
-            'items.*.tva_rate' => ['required', 'numeric', 'min:0'],
-        ]);
+            if ($invoice->calculation_version === 'decimal-v1') {
+                abort_if($invoice->payments()->exists()
+                    || ! BigDecimal::of($invoice->amount_paid)->isZero()
+                    || $invoice->status !== 'non_payee', 409,
+                    'Un brouillon comportant un règlement ou un statut de paiement incohérent ne peut pas être modifié.');
 
-        $client = Client::where('user_id', auth()->id())
-            ->findOrFail($validated['client_id']);
+                $validated = $request->validate([
+                    'client_id' => ['required', 'exists:clients,id'],
+                    'date' => ['required', 'date'],
+                    'due_date' => ['nullable', 'date', 'after_or_equal:date'],
+                    'notes' => ['nullable', 'string'],
+                    'items' => ['required', 'array', 'min:1'],
+                ]);
+                $client = Client::where('user_id', auth()->id())->findOrFail($validated['client_id']);
+                $prepared = $linePreparation->prepare($this->translateFiscalItems($request->input('items')));
 
-        DB::transaction(function () use ($validated, $invoice, $client) {
+                $invoice->update([
+                    'client_id' => $client->id,
+                    'date' => $validated['date'],
+                    'due_date' => $validated['due_date'] ?? null,
+                    'notes' => $validated['notes'] ?? null,
+                    'subtotal_ht' => $prepared['totals']['total_ht'],
+                    'total_tva' => $prepared['totals']['total_vat'],
+                    'total_ttc' => $prepared['totals']['total_ttc'],
+                ]);
+                $invoice->items()->delete();
+                foreach ($prepared['items'] as $item) {
+                    $invoice->items()->create($item);
+                }
+
+                return;
+            }
+
+            // Parcours historique : mêmes règles et mêmes calculs, sans migration de version.
+            $validated = $request->validate([
+                'client_id' => ['required', 'exists:clients,id'],
+                'date' => ['required', 'date'],
+                'due_date' => ['nullable', 'date', 'after_or_equal:date'],
+                'notes' => ['nullable', 'string'],
+
+                'items' => ['required', 'array', 'min:1'],
+                'items.*.description' => ['required', 'string'],
+                'items.*.quantity' => ['required', 'numeric', 'min:0.01'],
+                'items.*.unit_price_ht' => ['required', 'numeric', 'min:0'],
+                'items.*.tva_rate' => ['required', 'numeric', 'min:0'],
+            ]);
+
+            $client = Client::where('user_id', auth()->id())
+                ->findOrFail($validated['client_id']);
+
             $subtotalHt = 0;
             $totalTva = 0;
 
@@ -489,17 +538,57 @@ class InvoiceController extends Controller
             ->with('success', 'Facture mise à jour avec succès.');
     }
 
+    private function translateFiscalItems(array $items): array
+    {
+        Validator::make(['items' => $items], [
+            'items' => ['required', 'array', 'min:1'],
+            'items.*' => ['required', 'array'],
+            'items.*.tax_treatment' => ['required', 'string', 'in:taxable,franchise,exempt,zero_rated'],
+        ])->validate();
+
+        $fiscalErrors = [];
+        foreach ($items as $index => &$item) {
+            $category = match ($item['tax_treatment']) {
+                'taxable' => 'S',
+                'franchise', 'exempt' => 'E',
+                'zero_rated' => 'Z',
+            };
+            if (array_key_exists('vat_category', $item) && $item['vat_category'] !== $category) {
+                $fiscalErrors["items.$index.vat_category"] = 'La catégorie fiscale ne correspond pas au traitement choisi.';
+            }
+            if ($item['tax_treatment'] === 'franchise') {
+                if (isset($item['exemption_reason_code']) && $item['exemption_reason_code'] !== ''
+                    && $item['exemption_reason_code'] !== 'VATEX-FR-FRANCHISE') {
+                    $fiscalErrors["items.$index.exemption_reason_code"] = 'La franchise en base exige le code VATEX-FR-FRANCHISE.';
+                }
+                $item['exemption_reason_code'] = 'VATEX-FR-FRANCHISE';
+            } elseif ($item['tax_treatment'] === 'exempt'
+                && ($item['exemption_reason_code'] ?? null) === 'VATEX-FR-FRANCHISE') {
+                $fiscalErrors["items.$index.tax_treatment"] = 'Sélectionnez Franchise en base pour ce motif.';
+            }
+            $item['vat_category'] = $category;
+        }
+        unset($item);
+
+        if ($fiscalErrors !== []) {
+            throw ValidationException::withMessages($fiscalErrors);
+        }
+
+        return $items;
+    }
+
     public function destroy(Invoice $invoice): RedirectResponse
     {
         if ($invoice->user_id !== auth()->id()) {
             abort(403);
         }
 
-        if ($invoice->isIssued()) {
-            abort(403, 'Une facture définitive ne peut pas être supprimée.');
-        }
-
-        $invoice->delete();
+        DB::transaction(function () use ($invoice) {
+            $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            abort_unless($invoice->user_id === auth()->id(), 403);
+            abort_if($invoice->isIssued(), 403, 'Une facture définitive ne peut pas être supprimée.');
+            $invoice->delete();
+        });
 
         return redirect()
             ->route('invoices.index')
@@ -507,26 +596,57 @@ class InvoiceController extends Controller
     }
 
 
-    public function finalize(Invoice $invoice): RedirectResponse
+    public function finalize(Invoice $invoice, InvoiceLinePreparationService $linePreparation): RedirectResponse
     {
         if ($invoice->user_id !== auth()->id()) {
             abort(403);
         }
 
-        if (! $invoice->isDraft()) {
-            return redirect()
-                ->route('invoices.show', $invoice)
-                ->with('error', 'Cette facture est déjà définitive.');
-        }
-
-        DB::transaction(function () use ($invoice) {
-            // Verrouiller la facture pour éviter deux validations simultanées.
+        $finalized = DB::transaction(function () use ($invoice, $linePreparation) {
+            // Même ordre que les avoirs : utilisateur, puis facture. Le générateur
+            // réutilise ce verrou utilisateur dans cette même transaction.
+            DB::table('users')->where('id', auth()->id())->lockForUpdate()->firstOrFail();
             $lockedInvoice = Invoice::whereKey($invoice->id)
                 ->lockForUpdate()
                 ->firstOrFail();
+            abort_unless($lockedInvoice->user_id === auth()->id(), 403);
 
             if (! $lockedInvoice->isDraft()) {
-                abort(409, 'Cette facture a déjà été validée.');
+                return false;
+            }
+
+            abort_unless(in_array($lockedInvoice->calculation_version, [null, 'decimal-v1'], true), 409,
+                'Version de calcul inconnue.');
+
+            if ($lockedInvoice->calculation_version === 'decimal-v1') {
+                abort_if($lockedInvoice->invoice_number !== null, 409, 'Ce brouillon possède déjà un numéro.');
+                abort_if($lockedInvoice->payments()->exists()
+                    || ! BigDecimal::of($lockedInvoice->amount_paid)->isZero()
+                    || $lockedInvoice->status !== 'non_payee', 409,
+                    'Les paiements ou le statut de paiement de ce brouillon sont incompatibles avec sa validation.');
+
+                // Relecture des seules données persistées ; aucune correction à l'émission.
+                $lines = $lockedInvoice->items()->orderBy('id')->lockForUpdate()->get();
+                $prepared = $linePreparation->prepare($lines->map(fn (InvoiceItem $line) => $line->only([
+                    'description', 'quantity', 'unit_price_ht', 'tva_rate', 'vat_category',
+                    'unit_code', 'exemption_reason_code', 'exemption_reason',
+                ]))->all());
+                $errors = [];
+                foreach ($lines as $index => $line) {
+                    if (! BigDecimal::of($line->line_total_ht)->isEqualTo($prepared['items'][$index]['line_total_ht'])) {
+                        $errors["items.$index.line_total_ht"] = 'Le montant HT enregistré ne correspond pas au calcul de cette ligne.';
+                    }
+                }
+                // Les ventilations sont recalculées par le service, mais aucun instantané
+                // n'est stocké : on contrôle leurs totaux et les HT de chaque ligne.
+                foreach (['subtotal_ht' => 'total_ht', 'total_tva' => 'total_vat', 'total_ttc' => 'total_ttc'] as $field => $total) {
+                    if (! BigDecimal::of($lockedInvoice->$field)->isEqualTo($prepared['totals'][$total])) {
+                        $errors[$field] = 'Le montant enregistré ne correspond pas aux lignes et à leur ventilation TVA.';
+                    }
+                }
+                if ($errors !== []) {
+                    throw ValidationException::withMessages($errors);
+                }
             }
 
             // Attribuer son numéro uniquement au moment de la validation.
@@ -535,7 +655,13 @@ class InvoiceController extends Controller
                 'document_status' => 'issued',
                 'status' => 'non_payee',
             ]);
+            return true;
         });
+
+        if (! $finalized) {
+            return redirect()->route('invoices.show', $invoice)
+                ->with('error', 'Cette facture est déjà définitive.');
+        }
 
         return redirect()
             ->route('invoices.show', $invoice)

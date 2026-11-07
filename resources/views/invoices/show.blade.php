@@ -134,8 +134,27 @@
        style="background-color: #047857; color: #ffffff;">
         Télécharger l'avoir PDF
     </a>
+
+    @if($creditNote->refunded_at)
+        <p class="mt-3 text-sm font-semibold text-emerald-800">
+            ✓ Remboursé le {{ $creditNote->refunded_at->format('d/m/Y') }}
+            — {{ number_format((float) $creditNote->refunded_amount, 2, ',', ' ') }} €
+        </p>
+    @elseif((float) $invoice->payments()->sum('amount') > 0)
+        <form method="POST"
+              action="{{ route('credit-notes.refund', $creditNote) }}"
+              class="mt-3"
+              onsubmit="return confirm('Confirmer que le remboursement a réellement été effectué ?')">
+            @csrf
+
+            <button type="submit"
+                    class="style="background-color: #d97706; color: #ffffff; padding: 10px 16px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;"">
+                Marquer comme remboursé
+            </button>
+        </form>
+    @endif
 </div>
-                                    <strong class="text-emerald-900">−{{ number_format((float) $creditNote->total_ttc, 2, ',', ' ') }} €</strong>
+                                    <strong class="text-emerald-900">
                                 </div>
                             @endforeach
                         </div>

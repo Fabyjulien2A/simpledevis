@@ -30,6 +30,7 @@ class Invoice extends Model
         'due_date',
         'status',
         'document_status',
+        'calculation_version',
         'subtotal_ht',
         'total_tva',
         'total_ttc',

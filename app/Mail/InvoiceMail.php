@@ -3,7 +3,9 @@
 namespace App\Mail;
 
 use App\Models\Invoice;
-use Barryvdh\DomPDF\Facade\Pdf;
+use App\Services\InvoicePdfRenderer;
+use App\Support\FrenchDecimalFormatter;
+use Brick\Math\BigDecimal;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
@@ -13,33 +15,33 @@ class InvoiceMail extends Mailable
     use Queueable, SerializesModels;
 
     public Invoice $invoice;
-    public mixed $company;
+    public mixed $company = null;
 
     public function __construct(Invoice $invoice)
     {
         $this->invoice = $invoice;
-        $this->company = $invoice->user->company;
     }
 
-    public function build()
+    public function build(InvoicePdfRenderer $renderer, FrenchDecimalFormatter $decimalFormatter)
     {
-        $this->invoice->loadMissing('client', 'items', 'quote', 'user');
+        $document = $renderer->generate($this->invoice);
+        $this->invoice = $document['invoice'];
+        $this->company = $document['company'];
+        $pdfData = $document['pdfData'];
 
-        $pdf = Pdf::loadView('invoices.pdf', [
-            'invoice' => $this->invoice,
-            'company' => $this->company,
-        ]);
-
-        return $this->subject('Votre facture ' . $this->invoice->invoice_number)
+        return $this->subject('Votre facture ' . $pdfData['invoice_number'])
             ->view('emails.invoice')
             ->with([
                 'invoice' => $this->invoice,
                 'company' => $this->company,
+                'pdfData' => $pdfData,
+                'decimalFormatter' => $decimalFormatter,
+                'hasRemainingAmount' => BigDecimal::of($pdfData['totals']['remaining_amount'])->isGreaterThan('0.00'),
             ])
             ->attachData(
-                $pdf->output(),
-                'facture-' . $this->invoice->invoice_number . '.pdf',
-                ['mime' => 'application/pdf']
+                $document['content'],
+                $document['filename'],
+                ['mime' => $document['mime']]
             );
     }
 }

@@ -1,0 +1,1596 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "urn:simpledevis:superpdp:1.39.0.beta:en-invoice:strict-v1",
+    "title": "SUPER PDP en_invoice — local structural contract",
+    "$comment": "Derived locally from official OpenAPI. Not EN 16931 semantic validation or fiscal certification.",
+    "x-source": {
+        "url": "https://api.superpdp.tech/openapi/superpdp.json",
+        "version": "1.39.0.beta",
+        "openapi": "3.0.4",
+        "retrieved_on": "2026-11-06",
+        "sha256": "e071e043eee9d26ea667eb577d75de25fc9eb4641d0dd2c4516f2d0f874230e9",
+        "generator": "tools/build-superpdp-schema.php",
+        "local_policy": "strict-v1: local refs, unknown properties forbidden, plain decimal strings"
+    },
+    "$ref": "#/definitions/en_invoice",
+    "definitions": {
+        "additional_reference_previous_invoice_line": {
+            "description": "EXT-FR-FE-BG-06",
+            "properties": {
+                "previous_invoice_id": {
+                    "description": "EXT-FR-FE-136",
+                    "type": "string"
+                },
+                "previous_invoice_issue_date": {
+                    "description": "EXT-FR-FE-138",
+                    "format": "date",
+                    "type": "string"
+                },
+                "previous_invoice_line_number": {
+                    "description": "EXT-FR-FE-139",
+                    "type": "string"
+                },
+                "previous_invoice_type_code": {
+                    "$ref": "#/definitions/invoice_type_code"
+                }
+            },
+            "type": "object",
+            "additionalProperties": false
+        },
+        "additional_supporting_document": {
+            "properties": {
+                "attached_document": {
+                    "$ref": "#/definitions/binary_object"
+                },
+                "document_description": {
+                    "description": "BT-123\n\nSupporting document description\nA description of the supporting document.\nSuch as: timesheet, usage report etc.",
+                    "type": "string"
+                },
+                "document_reference": {
+                    "description": "BT-122\n\nSupporting document reference\nAn identifier of the supporting document.",
+                    "type": "string"
+                },
+                "external_document_location": {
+                    "description": "BT-124\n\nExternal document location\nThe URL (Uniform Resource Locator) that identifies where the external document is located.\nA means of locating the resource including its primary access mechanism, e.g. http:// or ftp://. External document location shall be used if the Buyer requires additional information to support the Invoice. External documents do not form part of the invoice. Risks can be involved when accessing external documents.",
+                    "type": "string"
+                },
+                "key": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "document_reference",
+                "key"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "amount": {
+            "description": "BT-110\n\nInvoice total VAT amount\nThe total VAT amount for the Invoice.\nThe Invoice total VAT amount is the sum of all VAT category tax amounts.\n\nBT-111\n\nInvoice total VAT amount in accounting currency\nThe VAT total amount expressed in the accounting currency accepted or required in the country of the Seller.\nTo be used when the VAT accounting currency (BT-6) differs from the Invoice currency code (BT-5) in accordance with article 230 of Directive 2006/112 / EC on VAT. The VAT amount in accounting currency is not used in the calculation of the Invoice totals.",
+            "properties": {
+                "currency_code": {
+                    "$ref": "#/definitions/currency_code"
+                },
+                "value": {
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                }
+            },
+            "required": [
+                "value"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "binary_object": {
+            "description": "BT-125",
+            "properties": {
+                "document": {
+                    "description": "BT-125-1\n\nAttached document\nAn attached document embedded as binary object or sent together with the invoice.\nAttached document is used when documentation shall be stored with the Invoice for future reference or audit purposes.",
+                    "format": "byte",
+                    "type": "string"
+                },
+                "filename": {
+                    "description": "BT-125-1\n\nAttached document Filename\nThe file name of the attached document",
+                    "type": "string"
+                },
+                "mime_code": {
+                    "description": "BT-125-2\n\nAttached document Mime code\nThe mime code of the attached document.\nAllowed mime codes:\n- application/pdf\n- image/png\n- image/jpeg\n- text/csv\n- application/vnd.openxmlformats- officedocument.spreadsheetml.sheet\n- application/vnd.oasis.opendocument. spreadsheet",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "mime_code",
+                "filename"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "buyer": {
+            "description": "BG-7\n\nA group of business terms providing information about the Buyer.",
+            "properties": {
+                "contact": {
+                    "$ref": "#/definitions/contact"
+                },
+                "electronic_address": {
+                    "$ref": "#/definitions/electronic_address"
+                },
+                "identifiers": {
+                    "description": "BT-46\n\nBuyer identifier\nAn identifier of the Buyer.\nIf no scheme is specified, it should be known by Buyer and Seller, e.g. a previously exchanged Seller assigned identifier of the Buyer.\nScheme identifier\nThe identification scheme identifier of the Buyer identifier.\nIf used, the identification scheme shall be chosen from the entries of the list published by the ISO/IEC 6523 maintenance agency.",
+                    "items": {
+                        "$ref": "#/definitions/identifier"
+                    },
+                    "type": "array"
+                },
+                "legal_registration_identifier": {
+                    "$ref": "#/definitions/legal_registration_identifier"
+                },
+                "name": {
+                    "description": "BT-44\n\nBuyer name\nThe full name of the Buyer.",
+                    "type": "string"
+                },
+                "postal_address": {
+                    "$ref": "#/definitions/postal_address"
+                },
+                "trading_name": {
+                    "description": "BT-45\n\nBuyer trading name\nA name by which the Buyer is known, other than Buyer name (also known as Business name).\nThis may be used if different from the Buyer name.",
+                    "type": "string"
+                },
+                "vat_identifier": {
+                    "description": "BT-48\n\nBuyer VAT identifier\nThe Buyer's VAT identifier (also known as Buyer VAT identification number).\nVAT number prefixed by a country code based on EN ISO 3166-1 \"Codes for the representation of names of countries and their subdivisions\"",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "name",
+                "postal_address"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "classification_identifier": {
+            "properties": {
+                "scheme": {
+                    "description": "Scheme identifier\nThe identification scheme identifier of the Item classification identifier\nThe identification scheme shall be chosen from the entries in UNTDID 7143 [6].",
+                    "type": "string"
+                },
+                "value": {
+                    "description": "Item classification identifier\nA code for classifying the item by its type or nature.\nClassification codes are used to allow grouping of similar items for a various purposes e.g. public procurement (CPV), e- Commerce (UNSPSC) etc.",
+                    "type": "string"
+                },
+                "version_scheme": {
+                    "description": "Scheme version identifier\nThe version of the identification scheme.",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "value",
+                "scheme",
+                "version_scheme"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "contact": {
+            "description": "BG-6\n\nA group of business terms providing contact information about the Seller.\n\nBG-9\n\nContact details can be given by the Buyer at the time of the ordering or as master data exchanged prior to ordering. Contact details should not be used for the purpose of routing the received Invoice internally by the recipient; the Buyer reference identifier should be used for this purpose.\n\nEXT-FR-FE-39, EXT-FR-FE-22, EXT-FR-FE-62, EXT-FR-FE-85, EXT-FR-FE-108, EXT-FR-FE-131",
+            "properties": {
+                "contact_point": {
+                    "description": "BT-41, BT-56, EXT-FR-FE-23, EXT-FR-FE-40, EXT-FR-FE-63, EXT-FR-FE-86, EXT-FR-FE-109, EXT-FR-FE-132\n\nA contact point for a legal entity or person.\nSuch as person name, contact identification, department or office identification.",
+                    "type": "string"
+                },
+                "department_name": {
+                    "description": "BT-41-0 Only in CII",
+                    "type": "string"
+                },
+                "email_address": {
+                    "description": "BT-43, BT-58, EXT-FR-FE-25, EXT-FR-FE-42, EXT-FR-FE-65, EXT-FR-FE-88, EXT-FR-FE-111, EXT-FR-FE-134\n\nAn e-mail address for the contact point.",
+                    "type": "string"
+                },
+                "phone_number": {
+                    "description": "BT-42, BT-57, EXT-FR-FE-24, EXT-FR-FE-41, EXT-FR-FE-64, EXT-FR-FE-87, EXT-FR-FE-110, EXT-FR-FE-133\n\nA phone number for the contact point.",
+                    "type": "string"
+                }
+            },
+            "type": "object",
+            "additionalProperties": false
+        },
+        "credit_transfer": {
+            "properties": {
+                "payment_account_identifier": {
+                    "$ref": "#/definitions/credit_transfer_identifier"
+                },
+                "payment_account_name": {
+                    "description": "BT-85\n\nThe name of the payment account, at a payment service provider, to which payment should be made.",
+                    "type": "string"
+                },
+                "payment_service_provider_identifier": {
+                    "description": "BT-86\n\nAn identifier for the payment service provider where a payment account is located.\nSuch as a BIC or a national clearing code where required. No identification scheme to be used.",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "payment_account_identifier"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "credit_transfer_identifier": {
+            "description": "BT-84\n\nPayment account identifier\nA unique identifier of the financial payment account, at a payment service provider, to which payment should be made.\nSuch as IBAN (in case of a SEPA payment) or a national account number.",
+            "properties": {
+                "scheme": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "value",
+                "scheme"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "currency_code": {
+            "description": "BT-5\n\nInvoice currency code\nThe currency in which all Invoice amounts are given, except for the Total VAT amount in accounting currency.\nOnly one currency shall be used in the Invoice, except for the Invoice total VAT amount in accounting currency (BT-111) in accordance with article 230 of Directive 2006/112/EC on VAT [2]. The lists of valid currencies are registered with the ISO 4217 Maintenance Agency “Codes for the representation of currencies and funds”.\n\nBT-6\n\nVAT accounting currency code\nThe currency used for VAT accounting and reporting purposes as accepted or required in the country of the Seller.\nShall be used in combination with the Invoice total VAT amount in accounting currency (BT-111) when the VAT accounting currency code differs from the Invoice currency code. The lists of valid currencies are registered with the ISO 4217 Maintenance Agency “Codes for the representation of currencies and funds”. Please refer to Article 230 of the Council Directive 2006/112/EC [2] for more information.\n\nBT-167-1\n\nBT-167-2",
+            "type": "string"
+        },
+        "delivery_information": {
+            "description": "BG-13\n\nA group of business terms providing information about where and when the goods and services invoiced are delivered.",
+            "properties": {
+                "deliver_to_name": {
+                    "description": "BT-70\n\nDeliver to party name\nThe name of the party to which the goods and services are delivered.\nShall be used if the Deliver to party is different from the Buyer.",
+                    "type": "string"
+                },
+                "delivery_date": {
+                    "description": "BT-72\n\nActual delivery date\nthe date on which the supply of goods or services was made or completed.",
+                    "format": "date",
+                    "type": "string"
+                },
+                "delivery_identifier": {
+                    "description": "BT-71\n\nDeliver to location identifier\nAn identifier for the location at which the goods and services are delivered.\nIf no scheme is specified, it should be known by Buyer and Seller, e.g. a previously exchanged Buyer or Seller assigned identifier.\nScheme identifier\nThe identification scheme identifier of the Deliver to location identifier.\nIf used, the identification scheme shall be chosen from the entries of the list published by the ISO/IEC 6523 maintenance agency.",
+                    "items": {
+                        "$ref": "#/definitions/identifier"
+                    },
+                    "type": "array"
+                }
+            },
+            "type": "object",
+            "additionalProperties": false
+        },
+        "delivery_terms": {
+            "description": "EXT-FR-FE-BG-14\n\nDelivery terms - INCOTERMS\n\nEXT-FR-FE-BG-15",
+            "properties": {
+                "incoterms": {
+                    "description": "EXT-FR-FE-185\n\nCode specifying the delivery type for these commercial delivery conditions.\nTo be chosen from the entries in the list UNTDID 4053 + INCOTERMS\n1: Delivery arranged by the supplier (Indicates that the supplier will arrange delivery of the goods).\n2: Delivery arranged by logistic service provider (Code indicating that the logistic service provider has arranged the delivery of goods).\nCFR: Cost and Freight (insert named port of destination)\nCIF: Cost, Insurance and Freight (insert named port of destination)\nCIP: Carriage and Insurance Paid to (insert named place of destination)\nCPT: Carriage Paid To (insert named place of destination)\nDAP: Delivered At Place (insert named place of destination)\nDAT: Delivered At Terminal (insert named terminal at port or place of destination)\nDDP: Delivered Duty Paid (insert named place of destination)\nEXW: Ex Works (insert named place of delivery)\nFAS: Free Alongside Ship (insert named port of shipment)\nFCA: Free Carrier (insert named place of delivery)\nFOB: Free On Board (insert named port of shipment)",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "EXT-FR-FE-186\n\nPlace of delivery. For example a harbour",
+                    "type": "string"
+                }
+            },
+            "type": "object",
+            "additionalProperties": false
+        },
+        "direct_debit": {
+            "description": "BG-19\n\nA group of business terms to specify a direct debit.\nThis group may be used to give prior notice in the invoice that payment will be made through a SEPA or other direct debit initiated by the Seller, in accordance with the rules of the SEPA or other direct debit scheme.",
+            "properties": {
+                "bank_assigned_creditor_identifier": {
+                    "description": "BT-90\n\nBank assigned creditor identifier\nUnique banking reference identifier of the Payee or Seller assigned by the Payee or Seller bank.\nUsed in order to pre-notify the Buyer of a SEPA direct debit.",
+                    "type": "string"
+                },
+                "debited_account_identifier": {
+                    "description": "BT-91\n\nDebited account identifier\nThe account to be debited by the direct debit.",
+                    "type": "string"
+                },
+                "mandate_reference_identifier": {
+                    "description": "BT-89\n\nMandate reference identifier\nUnique identifier assigned by the Payee for referencing the direct debit mandate.\nUsed in order to pre-notify the Buyer of a SEPA direct debit.",
+                    "type": "string"
+                }
+            },
+            "type": "object",
+            "additionalProperties": false
+        },
+        "electronic_address": {
+            "description": "BT-34, EXT-FR-FE-170\n\nSeller electronic address\nIdentifies the Seller's electronic address to which the application level response to the invoice may be delivered.\nScheme identifier\nThe identification scheme identifier of the Seller electronic address.\nThe scheme identifier shall be chosen from a list to be maintained by the Connecting Europe Facility.\n\nBT-49\n\nBuyer electronic address\nIdentifies the Buyer's electronic address to which the invoice is delivered.\nScheme identifier\nThe identification scheme identifier of the Buyer electronic address.\nThe scheme identifier shall be chosen from a list to be maintained by the Connecting Europe Facility.\n\nEXT-FR-FE-29, EXT-FR-FE-30, EXT-FR-FE-12, EXT-FR-FE-13, EXT-FR-FE-52, EXT-FR-FE-53, EXT-FR-FE-75, EXT-FR-FE-76, EXT-FR-FE-98, EXT-FR-FE-99, EXT-FR-FE-121, EXT-FR-FE-122\n\nEXT-FR-FE-29, EXT-FR-FE-30, EXT-FR-FE-12, EXT-FR-FE-13, EXT-FR-FE-52, EXT-FR-FE-53, EXT-FR-FE-75, EXT-FR-FE-76, EXT-FR-FE-98, EXT-FR-FE-99, EXT-FR-FE-121, EXT-FR-FE-122",
+            "properties": {
+                "scheme": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "value",
+                "scheme"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "en_invoice": {
+            "description": "ENInvoice structure is following EN 16931 semantic model\n- Bibliography\n- [[1] Directive 2014/55/EU of the European Parliament and of The Council of 16 April 2014 on\nelectronic invoicing in public procurement](http://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32014L0055).\n- [[2] COUNCIL DIRECTIVE. 2006/112/EC of 28 November 2006 on the common system of value added tax – last version: 2006L0112 - EN - 01.01.2015 - 016.001](http://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:02006L0112-20150101).\n- [[3] Directive 2011/7/EU of the European Parliament and of the Council of 16 February 2011 on combating late payment in commercial transactions](http://eur-lex.europa.eu/legal-content/EN/ALL/?uri=CELEX:32011L0007).\n- [[4] Directive 95/46/EC of the European Parliament and of the Council of 24 October 1995 on the protection of individuals with regard to the processing of personal data and on the free movement of such data](http://eur-lex.europa.eu/legal-content/EN/TXT/?uri=URISERV:l14012).\n- [[5] COUNCIL DIRECTIVE. 2008/9/EC of 12 February 2008 laying down detailed rules for the refund of value added tax, provided for in Directive 2006/112/EC, to taxable persons not established in the Member State of refund but established in another Member State](http://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32008L0009&qid=1437940645512).\n- [[6] United Nations Trade Data Interchange Directory (UNTDID)](http://www.unece.org/fileadmin/DAM/trade/untdid/d16b/tred/tredi2.htm)\n- [[7] UN/ECE Recommendation N° 20 “Codes for Units of Measure Used in International Trade”](http://www.unece.org/fileadmin/DAM/cefact/recommendations/rec20/rec20_latest_08052015.zip).\n- [[8] Regulation (EU) No 910/2014 of the European Parliament and of the Council of 23 July 2014 on electronic identification and trust services for electronic transactions in the internal market and repealing Directive 1999/93/EC](http://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:32014R0910).\n- [[9] European Interoperability Framework (EIF) for European public services](http://ec.europa.eu/isa/documents/isa_annex_ii_eif_en.pdf).\n- [[10] ANNEX TO THE COMMISSION IMPLEMENTING DECISION C. (2014)7912 final of 10 December 2014 on a standardisation request to the European standardisation organizations as regards a European standard on electronic invoicing and a set of ancillary standardisation deliverables pursuant to Regulation (EU) No 1025/2012 of the European Parliament and of the Council](http://ec.europa.eu/DocsRoom/documents/8650/attachments/1/translations/en/renditions/pdf)\n- [[11] COUNCIL DIRECTIVE. 2008/118/EC concerning the general arrangements for excise duty and repealing Directive 92/12/EEC](http://eur-lex.europa.eu/LexUriServ/LexUriServ.do?uri=OJ:L:2009:009:0012:0030:EN:PDF).\n- [[12] Object Management Group - Business Process Model and Notation v2](http://www.omg.org/spec/BPMN/2.0/)\n- [[13] SEPA Credit Transfer Scheme Implementation Guide](http://www.europeanpaymentscouncil.eu/index.cfm/knowledge-bank/epc-documents/sepa-credit-transfer-scheme-customer-to-bank-implementation-guidelines-version-8/epc132-08-c2b-ctig-v80-approvedpdf/)\n- [[14] SEPA Direct Debit Scheme Implementation Guide](http://www.europeanpaymentscouncil.eu/index.cfm/knowledge-bank/epc-documents/sepa-direct-debit-core-scheme-customer-to-bank-implementation-guidelines-version-8/epc130-08-sdd-core-c2b-ig-v80-approvedpdf/)\n- [[15] CLARIFICATION E.P.C. Paper on the Use of Slashes in References, Identifications and Identifiers](http://www.europeanpaymentscouncil.eu/index.cfm/knowledge-bank/epc-documents/sepa-credit-transfer-scheme-customer-to-bank-implementation-guidelines-version-8/epc230-15-clarification-paper-on-the-use-of-slashes-in-references-identifications-and-identifierspdf/)\n- [[16]](http://www.iso.org/iso/catalogue_detail.htm?csnumber=50649)\n- [[17]](http://www.eact.eu/docs/EACT_Standard_for_Remittance_Info.pdf)\n- [[18] TOGAF architecture compliance](http://pubs.opengroup.org/architecture/togaf9-doc/arch/chap48.html)\n- [[19] UN/ECE Recommendation N°. 21 - Codes for Passengers, Types of Cargo, Packages and\nPackaging Materials (with Complementary Codes for Package Names)](http://www.unece.org/fileadmin/DAM/cefact/recommendations/rec21/rec21.zip)\n- [20] ISO 639-2, Codes for the representation of names of languages — Part 2: Alpha-3 code",
+            "properties": {
+                "additional_supporting_documents": {
+                    "description": "BG-24\n\nA group of business terms providing information about additional supporting documents substantiating the claims made in the Invoice.\nThe additional supporting documents can be used for both referencing a document number which is expected to be known by the receiver, an external document (referenced by a URL) or as an embedded document (such as a time report in pdf). The option to link to an external document will be needed, for example in the case of large attachments and/or when sensitive information, e.g. person-related services, has to be separated from the Invoice itself.",
+                    "items": {
+                        "$ref": "#/definitions/additional_supporting_document"
+                    },
+                    "type": "array"
+                },
+                "addressed_to": {
+                    "$ref": "#/definitions/extension_contact"
+                },
+                "buyer": {
+                    "$ref": "#/definitions/buyer"
+                },
+                "buyer_accounting_reference": {
+                    "description": "BT-19\n\nBuyer accounting reference\nA textual value that specifies where to book the relevant data into the Buyer's financial accounts.",
+                    "type": "string"
+                },
+                "buyer_agent": {
+                    "$ref": "#/definitions/extension_contact"
+                },
+                "buyer_reference": {
+                    "description": "BT-10\n\nBuyer reference\nAn identifier assigned by the Buyer used for internal routing purposes.\nThe identifier is defined by the Buyer (e.g. contact ID, department, office id, project code), but provided by the Seller in the Invoice.",
+                    "type": "string"
+                },
+                "charges": {
+                    "description": "BG-21\n\nA group of business terms providing information about charges and taxes other than VAT, applicable to the Invoice as a whole.",
+                    "items": {
+                        "$ref": "#/definitions/invoice_allowance_or_charge"
+                    },
+                    "type": "array"
+                },
+                "contract_reference": {
+                    "description": "BT-12\n\nContract reference\nThe identification of a contract.\nThe contract identifier should be unique in the context of the specific trading relationship and for a defined time period.",
+                    "type": "string"
+                },
+                "contract_reference_date": {
+                    "description": "EXT-FR-FE-199\n\nContract reference date\nThe date of the contract reference",
+                    "format": "date",
+                    "type": "string"
+                },
+                "contract_type": {
+                    "description": "EXT-FR-FE-01\n\nType de contrat",
+                    "type": "string"
+                },
+                "currency_code": {
+                    "$ref": "#/definitions/currency_code"
+                },
+                "deliver_to_address": {
+                    "$ref": "#/definitions/postal_address"
+                },
+                "delivery_information": {
+                    "$ref": "#/definitions/delivery_information"
+                },
+                "delivery_terms": {
+                    "$ref": "#/definitions/delivery_terms"
+                },
+                "despatch_advice_reference": {
+                    "description": "BT-16\n\nDespatch advice reference\nAn identifier of a referenced despatch advice.",
+                    "type": "string"
+                },
+                "despatch_advice_reference_date": {
+                    "description": "EXT-FR-FE-198\n\nDespatch advice date\nDate of the despatch advice reference",
+                    "format": "date",
+                    "type": "string"
+                },
+                "document_level_allowances": {
+                    "description": "BG-20\n\nA group of business terms providing information about allowances applicable to the Invoice as a whole.\nDeductions, such as withheld tax may also be specified in this group.",
+                    "items": {
+                        "$ref": "#/definitions/invoice_allowance_or_charge"
+                    },
+                    "type": "array"
+                },
+                "invoiced_object_identifier_scheme": {
+                    "deprecated": true,
+                    "description": "BT-18-1\n\nScheme identifier\nThe identification scheme identifier of the Invoiced object identifier.\nIf it may be not clear for the receiver what scheme is used for the identifier, a conditional scheme identifier should be used that shall be chosen from the UNTDID 1153 code list [6] entries.\nDeprecated: Use InvoicedObjectIdentifiers instead",
+                    "type": "string"
+                },
+                "invoiced_object_identifier_value": {
+                    "deprecated": true,
+                    "description": "BT-18\n\nInvoiced object identifier\nAn identifier for an object on which the invoice is based, given by the Seller.\nIt may be a subscription number, telephone number, meter point, vehicle, person etc., as applicable.\nDeprecated: Use InvoicedObjectIdentifiers instead",
+                    "type": "string"
+                },
+                "invoiced_object_identifiers": {
+                    "description": "BT-18\n\nInvoicedObjectIdentifiers\nA list of identifers for objets on which the invoice is based, given by the Seller.\nEach object is composed of a value and a scheme\n- Value : It may be a susbscription number, telephone number, meter point, vehiclen person etc., as applicable.\n- Scheme: If it may be not clear for the receiver what scheme is used for the identifier, a conditional scheme identifier should be used that shall be chosen from the UNTDID 1153 code list [6] entries.",
+                    "items": {
+                        "$ref": "#/definitions/invoiced_object_identifier"
+                    },
+                    "type": "array"
+                },
+                "invoicing_period": {
+                    "$ref": "#/definitions/invoicing_period"
+                },
+                "issue_date": {
+                    "description": "BT-2\n\nInvoice issue date\nThe date when the Invoice was issued.",
+                    "format": "date",
+                    "type": "string"
+                },
+                "lines": {
+                    "description": "BG-25\n\nA group of business terms providing information on individual Invoice lines.",
+                    "items": {
+                        "$ref": "#/definitions/invoice_line"
+                    },
+                    "type": "array"
+                },
+                "notes": {
+                    "description": "BG-1\n\nA group of business terms providing textual notes that are relevant for the invoice, together with an indication of the note subject",
+                    "items": {
+                        "$ref": "#/definitions/invoice_note"
+                    },
+                    "type": "array"
+                },
+                "number": {
+                    "description": "BT-1\n\nInvoice number\nA unique identification of the Invoice.\nThe sequential number required in Article 226(2) of the directive 2006/112/EC [2], to uniquely identify the Invoice within the business context, time-frame, operating systems and records of the Seller. It may be based on one or more series of numbers, which may include alphanumeric characters. No identification scheme is to be used.",
+                    "type": "string"
+                },
+                "payee": {
+                    "$ref": "#/definitions/payee"
+                },
+                "payer": {
+                    "$ref": "#/definitions/extension_contact"
+                },
+                "payment_due_date": {
+                    "description": "BT-9\n\nPayment due date\nThe date when the payment is due.\nThe payment due date reflects the due date of the net payment. For partial payments it states the first net due date. The corresponding description of more complex payment terms can be stated in BT-20 Payment terms.",
+                    "format": "date",
+                    "type": "string"
+                },
+                "payment_instructions": {
+                    "$ref": "#/definitions/payment_instructions"
+                },
+                "payment_terms": {
+                    "description": "BT-20\n\nPayment terms\nA textual description of the payment terms that apply to the amount due for payment (Including description of possible penalties).\nThis element may contain multiple lines and multiple terms.",
+                    "type": "string"
+                },
+                "preceding_invoice_references": {
+                    "description": "BG-3\n\nA group of business terms providing information on one or more preceding Invoices.\nTo be used in case:\n- a preceding invoice is corrected\n- preceding partial invoices are referred to from a final invoice\n- preceding pre-payment invoices are referred to from a final invoice",
+                    "items": {
+                        "$ref": "#/definitions/preceding_invoice_reference"
+                    },
+                    "type": "array"
+                },
+                "process_control": {
+                    "$ref": "#/definitions/process_control"
+                },
+                "project_reference": {
+                    "description": "BT-11\n\nProject reference\nThe identification of the project the invoice refers to",
+                    "type": "string"
+                },
+                "purchase_order_reference": {
+                    "description": "BT-13\n\nPurchase order reference\nAn identifier of a referenced purchase order, issued by the Buyer.",
+                    "type": "string"
+                },
+                "purchase_order_reference_date": {
+                    "description": "EXT-FR-FE-197\n\nPurchase order reference date\nThe date of the purchase order reference",
+                    "format": "date",
+                    "type": "string"
+                },
+                "receiving_advice_reference": {
+                    "description": "BT-15\n\nReceiving advice reference\nAn identifier of a referenced receiving advice.",
+                    "type": "string"
+                },
+                "sales_order_reference": {
+                    "description": "BT-14\n\nSales order reference\nAn identifier of a referenced sales order, issued by the Seller.",
+                    "type": "string"
+                },
+                "seller": {
+                    "$ref": "#/definitions/seller"
+                },
+                "seller_agent": {
+                    "$ref": "#/definitions/extension_contact"
+                },
+                "seller_tax_representative_party": {
+                    "$ref": "#/definitions/seller_tax_representative_party"
+                },
+                "tender_or_lot_reference": {
+                    "description": "BT-17\n\nTender or lot reference\nThe identification of the call for tender or lot the invoice relates to.\nIn some countries a reference to the call for tender that has led to the contract shall be provided.",
+                    "type": "string"
+                },
+                "third_party_biller": {
+                    "$ref": "#/definitions/extension_contact"
+                },
+                "totals": {
+                    "$ref": "#/definitions/totals"
+                },
+                "type_code": {
+                    "$ref": "#/definitions/invoice_type_code"
+                },
+                "vat_accounting_currency_code": {
+                    "$ref": "#/definitions/currency_code"
+                },
+                "vat_break_down": {
+                    "description": "BG-23\n\nA group of business terms providing information about VAT breakdown by different categories, rates and exemption reasons",
+                    "items": {
+                        "$ref": "#/definitions/vat_break_down"
+                    },
+                    "type": "array"
+                },
+                "vat_change_rate": {
+                    "$ref": "#/definitions/exchange_rate"
+                },
+                "vat_point_date": {
+                    "description": "BT-7\n\nValue added tax point date\nThe date when the VAT becomes accountable for the Seller and for the Buyer in so far as that date can be determined and differs from the date of issue of the invoice, according to the VAT directive.\nThe tax point is usually the date goods were supplied or services completed (the 'basic tax point'). There are some variations. Please refer to Article 226 (7) of the Council Directive 2006/112/EC [2] for more information. This element is required if the Value added tax point date is different from the Invoice issue date. Both Buyer and Seller should use the Tax Point Date when provided by the Seller. The use of BT-7 and BT-8 is mutually exclusive.",
+                    "format": "date",
+                    "type": "string"
+                },
+                "vat_point_date_code": {
+                    "description": "BT-8\n\nValue added tax point date code\nThe code of the date when the VAT becomes accountable for the Seller and for the Buyer.\nThe code shall distinguish between the following entries of UNTDID 2005 [6]: - Invoice document issue date - Delivery date, actual - Paid to dateThe Value added tax point date code is used if the Value added tax point date is not known when the invoice is issued. The use of BT-8 and BT-7 is mutually exclusive.\nEN16931-3-3: BT-8 (Value added tax point date code).\nWhile the model defines a restriction of UNTDID 2005, CII supports in the mapped to element a restriction of UNTDID 2475 as follows:\nSemantic model\t\t\t\tCode in UNTDID 2005\t\tCode for CII in UNTDID 2475\nInvoice document issue date\t3\t\t\t\t\t\t5\nDelivery date, actual\t\t35\t\t\t\t\t\t29\nPaid to date\t\t\t\t\t432\t\t\t\t\t\t72",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "number",
+                "issue_date",
+                "type_code",
+                "currency_code",
+                "process_control",
+                "seller",
+                "buyer",
+                "totals",
+                "vat_break_down",
+                "lines"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "exchange_rate": {
+            "description": "BT-167\n\nVAT exchange rate\nExchange rate for the currency in which VAT is accounted for",
+            "properties": {
+                "date": {
+                    "description": "EXT-FR-FE-192",
+                    "format": "date",
+                    "type": "string"
+                },
+                "rate": {
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "source_currency": {
+                    "$ref": "#/definitions/currency_code"
+                },
+                "target_currency": {
+                    "$ref": "#/definitions/currency_code"
+                }
+            },
+            "required": [
+                "rate"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "extension_contact": {
+            "description": "EXT-FR-FE-BG-01\n\nEXT-FR-FE-BG-02\n\nEXT-FR-FE-BG-03\n\nEXT-FR-FE-BG-04\n\nEXT-FR-FE-BG-05",
+            "properties": {
+                "contact_point": {
+                    "description": "BT-41, BT-56, EXT-FR-FE-23, EXT-FR-FE-40, EXT-FR-FE-63, EXT-FR-FE-86, EXT-FR-FE-109, EXT-FR-FE-132\n\nA contact point for a legal entity or person.\nSuch as person name, contact identification, department or office identification.",
+                    "type": "string"
+                },
+                "department_name": {
+                    "description": "BT-41-0 Only in CII",
+                    "type": "string"
+                },
+                "electronic_address": {
+                    "$ref": "#/definitions/electronic_address"
+                },
+                "email_address": {
+                    "description": "BT-43, BT-58, EXT-FR-FE-25, EXT-FR-FE-42, EXT-FR-FE-65, EXT-FR-FE-88, EXT-FR-FE-111, EXT-FR-FE-134\n\nAn e-mail address for the contact point.",
+                    "type": "string"
+                },
+                "identifiers": {
+                    "description": "// EXT-FR-FE-06, EXT-FR-FE-07, EXT-FR-FE-46, EXT-FR-FE-47, EXT-FR-FE-69, EXT-FR-FE-70, EXT-FR-FE-92, EXT-FR-FE-92-1, EXT-FR-FE-115, EXT-FR-FE-116",
+                    "items": {
+                        "$ref": "#/definitions/identifier"
+                    },
+                    "type": "array"
+                },
+                "name": {
+                    "description": "BT-27, BT-44, BT-59, EXT-FR-FE-03, EXT-FR-FE-43, EXT-FR-FE-66, EXT-FR-FE-89, EXT-FR-FE-112",
+                    "type": "string"
+                },
+                "phone_number": {
+                    "description": "BT-42, BT-57, EXT-FR-FE-24, EXT-FR-FE-41, EXT-FR-FE-64, EXT-FR-FE-87, EXT-FR-FE-110, EXT-FR-FE-133\n\nA phone number for the contact point.",
+                    "type": "string"
+                },
+                "postal_address": {
+                    "$ref": "#/definitions/postal_address"
+                },
+                "role_code": {
+                    "description": "EXT-FR-FE-04, EXT-FR-FE-44, EXT-FR-FE-67, EXT-FR-FE-90, EXT-FR-FE-113",
+                    "type": "string"
+                },
+                "siren_identifier": {
+                    "$ref": "#/definitions/legal_registration_identifier"
+                },
+                "trading_name": {
+                    "description": "EXT-FR-FE-05, EXT-FR-FE-45, EXT-FR-FE-68, EXT-FR-FE-91, EXT-FR-FE-114",
+                    "type": "string"
+                },
+                "vat_identifier": {
+                    "description": "BT-31, BT-48, EXT-FR-FE-27, EXT-FR-FE-28, EXT-FR-FE-10, EXT-FR-FE-11, EXT-FR-FE-50, EXT-FR-FE-51, EXT-FR-FE-73, EXT-FR-FE-74, EXT-FR-FE-96, EXT-FR-FE-97, EXT-FR-FE-119, EXT-FR-FE-120",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "name"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "identifier": {
+            "properties": {
+                "scheme": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "value",
+                "scheme"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "invoice_allowance_or_charge": {
+            "properties": {
+                "amount": {
+                    "description": "BT-92, BT-99, BT-136, BT-141\n\nDocument level allowance/charge amount\nThe amount of an allowance/charge, without VAT.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "base_amount": {
+                    "description": "BT-93, BT-100, BT-137, BT-142\n\nDocument level allowance/charge base amount\nThe base amount that may be used, in conjunction with the document level allowance/charge percentage, to calculate the document level allowance/charge amount.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "percent": {
+                    "description": "BT-94, BT-101, BT-138, BT-143\n\nDocument level allowance/charge percentage\nThe percentage that may be used, in conjunction with the document level allowance/charge base amount, to calculate the document level allowance/charge amount.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "reason": {
+                    "description": "BT-97, BT-104, BT-139, BT-144\n\nDocument level allowance/charge reason\nThe reason for the document level allowance/charge, expressed as text.",
+                    "type": "string"
+                },
+                "reason_code": {
+                    "$ref": "#/definitions/reason_code"
+                },
+                "reason_code_list": {
+                    "description": "BT-177-1, BT-193-1\n\nTo distinguish between BT-177 and BT-105, use '5153' on the reason_code_list for BT-177-1 and BT-193-1",
+                    "type": "string"
+                },
+                "vat_category_code": {
+                    "$ref": "#/definitions/vat_category_code"
+                },
+                "vat_exemption_reason": {
+                    "description": "EXT-FR-FE-187, EXT-FR-FE-189\n\nReason for exemption from VAT of charges and fees at document level",
+                    "type": "string"
+                },
+                "vat_exemption_reason_code": {
+                    "description": "EXT-FR-FE-188, EXT-FR-FE-190\n\nReason code for exemption from VAT of charges and fees at document level",
+                    "type": "string"
+                },
+                "vat_identifier": {
+                    "description": "BT-95-0, BT-102-0\n\nVAT identifier qualifier for the discount at document level",
+                    "type": "string"
+                },
+                "vat_rate": {
+                    "description": "BT-96, BT-103\n\nDocument level allowance/charge VAT rate\nThe VAT rate, represented as percentage that applies to the document level allowance/charge.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                }
+            },
+            "required": [
+                "vat_category_code",
+                "amount"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "invoice_line": {
+            "properties": {
+                "additional_reference_previous_invoice_line": {
+                    "$ref": "#/definitions/additional_reference_previous_invoice_line"
+                },
+                "allowances": {
+                    "description": "BG-27\n\nA group of business terms providing information about allowances applicable to the individual Invoice line.",
+                    "items": {
+                        "$ref": "#/definitions/invoice_line_allowance_or_charge"
+                    },
+                    "type": "array"
+                },
+                "buyer_accounting_reference": {
+                    "description": "BT-133\n\nInvoice line Buyer accounting reference\nA textual value that specifies where to book the relevant data into the Buyer's financial accounts.\nIf required, this reference shall be provided by the Buyer to the Seller prior to the issuing of the Invoice.",
+                    "type": "string"
+                },
+                "charges": {
+                    "description": "BG-28\n\nA group of business terms providing information about charges and taxes other than VAT applicable to the individual Invoice line.\nAll charges and taxes are assumed to be liable to the same VAT rate as the Invoice line.",
+                    "items": {
+                        "$ref": "#/definitions/invoice_line_allowance_or_charge"
+                    },
+                    "type": "array"
+                },
+                "delivery_address": {
+                    "$ref": "#/definitions/line_delivery_address"
+                },
+                "delivery_terms": {
+                    "$ref": "#/definitions/delivery_terms"
+                },
+                "identifier": {
+                    "description": "BT-126\n\nInvoice line identifier\nA unique identifier for the individual line within the Invoice.",
+                    "type": "string"
+                },
+                "invoiced_quantity": {
+                    "description": "BT-129\n\nInvoiced quantity\nThe quantity of items (goods or services) that is charged in the Invoice line.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "invoiced_quantity_code": {
+                    "$ref": "#/definitions/unit_code"
+                },
+                "item_information": {
+                    "$ref": "#/definitions/item_information"
+                },
+                "line_vat_accounting_currency": {
+                    "description": "EXT-FR-FE-182-1\n\nAccounting currency for the VAT Amount of the invoice line",
+                    "type": "string"
+                },
+                "line_vat_amount": {
+                    "description": "EXT-FR-FE-181\n\nVAT amount of invoice line in invoice currency",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "line_vat_amount_accounting_currency": {
+                    "description": "EXT-FR-FE-182\n\nVAT amount of the invoice line in the accounting currency",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "line_vat_currency": {
+                    "description": "EXT-FR-FE-181-1\n\nCurrency of the VAT Amount of the invoice line",
+                    "type": "string"
+                },
+                "line_with_vat_net_amount": {
+                    "description": "EXT-FR-FE-184\n\nTotal amount with VAT of the invoice line",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "net_amount": {
+                    "description": "BT-131\n\nInvoice line net amount\nThe total amount of the Invoice line.\nThe amount is “net” without VAT, i.e. inclusive of line level allowances and charges as well as other relevant taxes.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "notes": {
+                    "description": "BT-127\n\nInvoice line note\nA textual note that gives unstructured information that is relevant to the Invoice line.",
+                    "items": {
+                        "$ref": "#/definitions/invoice_line_note"
+                    },
+                    "type": "array"
+                },
+                "object_identifier": {
+                    "description": "BT-128\n\nInvoice line object identifier\nAn identifier for an object on which the invoice line is based, given by the Seller.\nIt may be a subscription number, telephone number, meter point etc., as applicable.\nScheme identifier\nThe identification scheme identifier of the Invoice line object identifier.\nIf it may be not clear for the receiver what scheme is used for the identifier, a conditional scheme identifier should be used that shall be chosen from the UNTDID 1153 code list [6] entries.",
+                    "items": {
+                        "$ref": "#/definitions/identifier"
+                    },
+                    "type": "array"
+                },
+                "parent_identifier": {
+                    "description": "EXT-FR-FE-162\n\nParent line identifier\nIdentifier of the parent line to which this line is attached (in case of sub-line)",
+                    "type": "string"
+                },
+                "parent_unit_code": {
+                    "description": "EXT-FR-FE-191-1\n\nUnit of measure applicable to item quantity in a Parent line",
+                    "type": "string"
+                },
+                "parent_unit_quantity": {
+                    "description": "EXT-FR-FE-191\n\nQuantity of items from this line present in ONE unit of the Parent line",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "period": {
+                    "$ref": "#/definitions/invoicing_period"
+                },
+                "price_details": {
+                    "$ref": "#/definitions/price_details"
+                },
+                "purchase_order_reference_date": {
+                    "description": "EXT-FR-FE-200\n\nPurchase order reference date",
+                    "format": "date",
+                    "type": "string"
+                },
+                "purchase_order_reference_from_buyer": {
+                    "description": "EXT-FR-FE-135",
+                    "type": "string"
+                },
+                "real_delivery_date": {
+                    "description": "EXT-FR-FE-158, EXT-FR-FE-BG-11",
+                    "format": "date",
+                    "type": "string"
+                },
+                "receipt_voucher": {
+                    "$ref": "#/definitions/line_identifier"
+                },
+                "referenced_purchase_order_line_reference": {
+                    "description": "BT-132\n\nReferenced purchase order line reference\nAn identifier for a referenced line within a purchase order, issued by the Buyer.\nThe purchase order identifier is referenced on document level.",
+                    "type": "string"
+                },
+                "sales_order": {
+                    "$ref": "#/definitions/line_identifier"
+                },
+                "seller": {
+                    "$ref": "#/definitions/seller"
+                },
+                "shipping_notice": {
+                    "$ref": "#/definitions/shipping_notice"
+                },
+                "subtype": {
+                    "description": "EXT-FR-FE-163\n\nLine type which allows you to determine if the line data is to be used for calculating the invoice\nValue to choose between the following values:\n- DETAIL: standard line or sub-line, taken into account in the calculations of totals and VAT detail\n- GROUP: grouping line, to which child lines refer. Certain mandatory one-line references are no longer mandatory. If the line total excluding tax (BT-131) is entered, it must be equal to the sum of the line totals excluding tax of the sub-lines.\n- INFORMATION: line with data for information, not taken into account in the calculations",
+                    "type": "string"
+                },
+                "vat_information": {
+                    "$ref": "#/definitions/line_vat_information"
+                }
+            },
+            "required": [
+                "identifier",
+                "net_amount",
+                "price_details",
+                "item_information"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "invoice_line_allowance_or_charge": {
+            "properties": {
+                "amount": {
+                    "description": "BT-92, BT-99, BT-136, BT-141\n\nDocument level allowance/charge amount\nThe amount of an allowance/charge, without VAT.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "base_amount": {
+                    "description": "BT-93, BT-100, BT-137, BT-142\n\nDocument level allowance/charge base amount\nThe base amount that may be used, in conjunction with the document level allowance/charge percentage, to calculate the document level allowance/charge amount.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "percent": {
+                    "description": "BT-94, BT-101, BT-138, BT-143\n\nDocument level allowance/charge percentage\nThe percentage that may be used, in conjunction with the document level allowance/charge base amount, to calculate the document level allowance/charge amount.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "reason": {
+                    "description": "BT-97, BT-104, BT-139, BT-144\n\nDocument level allowance/charge reason\nThe reason for the document level allowance/charge, expressed as text.",
+                    "type": "string"
+                },
+                "reason_code": {
+                    "$ref": "#/definitions/reason_code"
+                },
+                "reason_code_list": {
+                    "description": "BT-177-1, BT-193-1\n\nTo distinguish between BT-177 and BT-105, use '5153' on the reason_code_list for BT-177-1 and BT-193-1",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "amount"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "invoice_line_note": {
+            "properties": {
+                "note": {
+                    "description": "BT-127",
+                    "type": "string"
+                },
+                "subject_code": {
+                    "$ref": "#/definitions/invoice_note_code"
+                }
+            },
+            "required": [
+                "subject_code",
+                "note"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "invoice_note": {
+            "properties": {
+                "note": {
+                    "description": "BT-22\n\nInvoice note\nA textual note that gives unstructured information that is relevant to the Invoice as a whole.\nSuch as the reason for any correction or assignment note in case the invoice has been factored",
+                    "type": "string"
+                },
+                "subject_code": {
+                    "$ref": "#/definitions/invoice_note_code"
+                }
+            },
+            "required": [
+                "note"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "invoice_note_code": {
+            "description": "BT-21\n\nInvoice note subject code\nThe subject of the textual note in BT-22.\nTo be chosen from the entries in UNTDID 4451 [6].\n\nEXT-FR-FE-183",
+            "type": "string"
+        },
+        "invoice_type_code": {
+            "description": "BT-3\n\nInvoice type code\nA code specifying the functional type of the Invoice.\nCommercial invoices and credit notes are defined according the entries in UNTDID 1001 [6]. Other entries of UNTDID 1001 [6] with specific invoices or credit notes may be used if applicable.\n\nEXT-FR-FE-02\n\nType de facture antérieure\nUNTDID 1001\nBR-FR-04\nCode spécifiant le type fonctionnel de la Facture antérieure\n\nEXT-FR-FE-137",
+            "type": "integer"
+        },
+        "invoiced_object_identifier": {
+            "type": "object",
+            "additionalProperties": false
+        },
+        "invoicing_period": {
+            "description": "BG-14\n\nA group of business terms providing information on the invoice period.\nUsed to indicate when the period covered by the invoice starts and when it ends. Also called delivery period.\n\nBG-26\n\nA group of business terms providing information about the period relevant for the Invoice line.\nIs also called Invoice line delivery period.",
+            "properties": {
+                "end_date": {
+                    "description": "BT-74, BT-135\n\nThe date when the Invoice period ends.\nThe date on which the delivery of goods or services was completed.",
+                    "format": "date",
+                    "type": "string"
+                },
+                "start_date": {
+                    "description": "BT-73, BT-134\n\nThe date when the Invoice period starts.\nThe initial date of delivery of goods or services.",
+                    "format": "date",
+                    "type": "string"
+                }
+            },
+            "type": "object",
+            "additionalProperties": false
+        },
+        "item_attribute": {
+            "properties": {
+                "code": {
+                    "description": "EXT-FR-FE-159\n\nItem attribute code\nCode to qualify the article attribute\nExample: BRL for a CO2 measurement",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "BT-160\n\nItem attribute name\nThe name of the attribute or property of the item.\nSuch as “Colour”.",
+                    "type": "string"
+                },
+                "quantity": {
+                    "description": "EXT-FR-FE-160\n\nValue with measure unit",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "quantity_unit": {
+                    "description": "EXT-FR-FE-161",
+                    "type": "string"
+                },
+                "value": {
+                    "description": "BT-161\n\nItem attribute value\nThe value of the attribute or property of the item.\nSuch as “Red”.",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "value"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "item_information": {
+            "description": "BG-31\n\nA group of business terms providing information about the goods and services invoiced.",
+            "properties": {
+                "attributes": {
+                    "description": "BG-32\n\nA group of business terms providing information about properties of the goods and services invoiced.",
+                    "items": {
+                        "$ref": "#/definitions/item_attribute"
+                    },
+                    "type": "array"
+                },
+                "buyer_identifier": {
+                    "description": "BT-156\n\nItem Buyer's identifier\nAn identifier, assigned by the Buyer, for the item.",
+                    "type": "string"
+                },
+                "classification_identifier": {
+                    "description": "BT-158",
+                    "items": {
+                        "$ref": "#/definitions/classification_identifier"
+                    },
+                    "type": "array"
+                },
+                "country_of_origin": {
+                    "description": "BT-159\n\nItem country of origin\nThe code identifying the country from which the item originates.\nThe lists of valid countries are registered with the EN ISO 3166-1 Maintenance agency, “Codes for the representation of names of countries and their subdivisions”.",
+                    "type": "string"
+                },
+                "description": {
+                    "description": "BT-154\n\nItem description\nA description for an item.\nThe Item description allows for describing the item and its features in more detail than the Item name.",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "BT-153\n\nItem name\nA name for an item.",
+                    "type": "string"
+                },
+                "seller_identifier": {
+                    "description": "BT-155\n\nItem Seller's identifier\nAn identifier, assigned by the Seller, for the item.",
+                    "type": "string"
+                },
+                "standard_identifier_scheme": {
+                    "description": "BT-157-1\n\nScheme identifier\nThe identification scheme identifier of the Item standard identifier",
+                    "type": "string"
+                },
+                "standard_identifier_value": {
+                    "description": "BT-157\n\nItem standard identifier\nAn item identifier based on a registered scheme.",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "name"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "legal_registration_identifier": {
+            "description": "BT-30, EXT-FR-FE-167\n\nSeller legal registration identifier\nAn identifier issued by an official registrar that identifies the Seller as a legal entity or person.\nIf no identification scheme is specified, it should be known by Buyer and Seller.\nScheme identifier\nThe identification scheme identifier of the Seller legal registration identifier.\nIf used, the identification scheme shall be chosen from the entries of the list published by the ISO/IEC 6523 maintenance agency.\n\nBT-47\n\nBuyer legal registration identifier\nAn identifier issued by an official registrar that identifies the Buyer as a legal entity or person.\nIf no identification scheme is specified, it should be known by Buyer and Seller, e.g. the identifier that is exclusively used in the applicable legal environment.\nScheme identifier\nThe identification scheme identifier of the Buyer legal registration identifier.\nIf used, the identification scheme shall be chosen from the entries of the list published by the ISO/IEC 6523 maintenance agency.\n\nEXT-FR-FE-08, EXT-FR-FE-09, EXT-FR-FE-48, EXT-FR-FE-49, EXT-FR-FE-71, EXT-FR-FE-72, EXT-FR-FE-94, EXT-FR-FE-95, EXT-FR-FE-117, EXT-FR-FE-118\n\nBT-61\n\nPayee legal registration identifier\nAn identifier issued by an official registrar that identifies the Payee as a legal entity or person.\nIf no scheme is specified, it should be known by Buyer and Seller, e.g. the identifier that is exclusively used in the applicable legal environment.\nScheme identifier\nThe identification scheme identifier of the Payee legal registration identifier.\nIf used, the identification scheme shall be chosen from the entries of the list published by the ISO/IEC 6523 maintenance agency.",
+            "properties": {
+                "scheme": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "value",
+                "scheme"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "line_delivery_address": {
+            "description": "EXT-FR-FE-BG-10",
+            "properties": {
+                "delivery_place_identifier": {
+                    "description": "EXT-FR-FE-146, EXT-FR-FE-148",
+                    "items": {
+                        "$ref": "#/definitions/identifier"
+                    },
+                    "type": "array"
+                },
+                "delivery_place_name": {
+                    "description": "EXT-FR-FE-149",
+                    "type": "string"
+                },
+                "postal_address": {
+                    "$ref": "#/definitions/postal_address"
+                }
+            },
+            "required": [
+                "delivery_place_identifier",
+                "delivery_place_name",
+                "postal_address"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "line_identifier": {
+            "description": "EXT-FR-FE-BG-08\n\nEXT-FR-FE-BG-09",
+            "properties": {
+                "identifier": {
+                    "description": "EXT-FR-FE-142, EXT-FR-FE-144",
+                    "type": "string"
+                },
+                "line_identifier": {
+                    "description": "EXT-FR-FE-143, EXT-FR-FE-145",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "identifier",
+                "line_identifier"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "line_vat_information": {
+            "description": "BG-30\n\nA group of business terms providing information about the VAT applicable for the goods and services invoiced on the Invoice line.",
+            "properties": {
+                "due_date_code": {
+                    "description": "EXT-FR-FE-180\n\nVAT due date code on line",
+                    "type": "string"
+                },
+                "exemption_reason": {
+                    "description": "EXT-FR-FE-178\n\nVAT exemption reason",
+                    "type": "string"
+                },
+                "exemption_reason_code": {
+                    "description": "EXT-FR-FE-179\n\nVAT exemption reason code",
+                    "type": "string"
+                },
+                "invoiced_item_vat_category_code": {
+                    "$ref": "#/definitions/vat_category_code"
+                },
+                "invoiced_item_vat_rate": {
+                    "description": "BT-152\n\nInvoiced item VAT rate\nThe VAT rate, represented as percentage that applies to the invoiced item.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                }
+            },
+            "type": "object",
+            "additionalProperties": false
+        },
+        "payee": {
+            "description": "BG-10\n\nA group of business terms providing information about the Payee, i.e. the role that receives the payment.\nThe role of Payee may be fulfilled by another party than the Seller, e.g. a factoring service.",
+            "properties": {
+                "contact": {
+                    "$ref": "#/definitions/contact"
+                },
+                "electronic_address": {
+                    "$ref": "#/definitions/electronic_address"
+                },
+                "identifiers": {
+                    "description": "BT-60\n\nPayee identifier\nAn identifier for the Payee.\nIf no scheme is specified, it should be known by Buyer and Seller, e.g. a previously exchanged Buyer or Seller assigned identifier.\nScheme identifier\nThe identification scheme identifier of the Payee identifier.\nIf used, the identification scheme shall be chosen from the entries of the list published by the ISO/IEC 6523 maintenance agency.",
+                    "items": {
+                        "$ref": "#/definitions/identifier"
+                    },
+                    "type": "array"
+                },
+                "legal_registration_identifier": {
+                    "$ref": "#/definitions/legal_registration_identifier"
+                },
+                "name": {
+                    "description": "BT-59\n\nThe name of the Payee.\nShall be used when the Payee is different from the Seller. The Payee name may however be the same as the Seller name.",
+                    "type": "string"
+                },
+                "postal_address": {
+                    "$ref": "#/definitions/postal_address"
+                },
+                "role_code": {
+                    "description": "EXT-FR-FE-26\n\nhttps://service.unece.org/trade/untdid/d99a/uncl/uncl3035.htm",
+                    "type": "string"
+                },
+                "vat_identifier": {
+                    "description": "BT-31, BT-48, EXT-FR-FE-27, EXT-FR-FE-28, EXT-FR-FE-10, EXT-FR-FE-11, EXT-FR-FE-50, EXT-FR-FE-51, EXT-FR-FE-73, EXT-FR-FE-74, EXT-FR-FE-96, EXT-FR-FE-97, EXT-FR-FE-119, EXT-FR-FE-120",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "name"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "payment_card_information": {
+            "description": "BG-18\n\nA group of business terms providing information about card used for payment contemporaneous with invoice issuance.\nOnly used if the Buyer had opted to pay by using a payment card such as a credit or debit card.",
+            "properties": {
+                "account_number": {
+                    "description": "BT-87\n\nPayment card primary account number\nThe Primary Account Number (PAN) of the card used for payment.\nIn accordance with card payments security standards an invoice should never include a full card primary account number. At the moment PCI Security Standards Council has defined that the first 6 digits and last 4 digits are the maximum number of digits to be shown.",
+                    "type": "string"
+                },
+                "holder_name": {
+                    "description": "BT-88\n\nPayment card holder name\nThe name of the payment card holder.",
+                    "type": "string"
+                },
+                "network_id": {
+                    "description": "BT-87-1 Only in UBL",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "account_number"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "payment_instructions": {
+            "description": "BG-16\n\nA group of business terms providing information about the payment.",
+            "properties": {
+                "credit_transfers": {
+                    "description": "BG-17\n\nA group of business terms to specify credit transfer payments.",
+                    "items": {
+                        "$ref": "#/definitions/credit_transfer"
+                    },
+                    "type": "array"
+                },
+                "direct_debit": {
+                    "$ref": "#/definitions/direct_debit"
+                },
+                "payment_card_information": {
+                    "$ref": "#/definitions/payment_card_information"
+                },
+                "payment_means_text": {
+                    "description": "BT-82\n\nPayment means text\nThe means, expressed as text, for how a payment is expected to be or has been settled.\nSuch as cash, credit transfer, direct debit, credit card, etc.",
+                    "type": "string"
+                },
+                "payment_means_type_code": {
+                    "$ref": "#/definitions/payment_means_code"
+                },
+                "remittance_information": {
+                    "description": "BT-83\n\nRemittance information\nA textual value used to establish a link between the payment and the Invoice, issued by the Seller.\nUsed for creditor's critical reconciliation information. This information element helps the Seller to assign an incoming payment to the relevant payment process. When specifying the textual value, which is commonly the invoice number of the invoice being paid, but may be another seller reference, the buyer should indicate this reference in his payment order when executing the payment. In a payment transaction this reference is transferred back to the Seller as Remittance Information. In order to allow for automatic processing of cross-border SEPA payments, only Latin characters should be used in this field, with a maximum of 140 characters. Reference section 1.4 of the SEPA credit transfer and SEPA direct debit scheme implementation guides [13] and [14] for details of the allowed characters. Other rules may apply for SEPA payments within national borders. If remittance information is structured according to the ISO 11649:2009 standard [16] for Structured RF Creditor Reference, it shall be mapped to the Structured Remittance Information Creditor Reference field in SEPA payments messages. If remittance information is structured according to the EACT standard for automated reconciliation [17], it shall be mapped to the Unstructured Remittance Information field in SEPA payments messages.” If remittance information is to be mapped to the End To End Identification field or to the Structured Remittance Information Creditor Reference field in SEPA payments messages, then in addition to the Latin character set restriction, the content shall not start or end with a '/' and the content shall not contain '//'s. See reference [15].",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "payment_means_type_code"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "payment_means_code": {
+            "description": "https://unece.org/fileadmin/DAM/trade/untdid/d16b/tred/tred4461.htm\n\nBT-81\n\nPayment means type code\nThe means, expressed as code, for how a payment is expected to be or has been settled.\nEntries from the UNTDID 4461 code list [6] shall be used. Distinction should be made between SEPA and non-SEPA payments, and between credit payments, direct debits, card payments and other instruments.",
+            "type": "string"
+        },
+        "postal_address": {
+            "description": "BG-5, EXT-FR-FE-BG-13\n\nA group of business terms providing information about the address of the Seller.\nSufficient components of the address are to be filled to comply with legal requirements.\n\nBG-8\n\nA group of business terms providing information about the postal address for the Buyer.\nSufficient components of the address are to be filled to comply with legal requirements.\n\nEXT-FR-FE-14, EXT-FR-FE-54, EXT-FR-FE-77, EXT-FR-FE-100, EXT-FR-FE-123\n\nBG-8, EXT-FR-FE-31\n\nBG-12\n\nThe Seller tax representative name/postal address shall be provided in the invoice, if the Seller has a tax representative who is liable to pay the VAT due. Sufficient components of the address are to be filled to comply with legal requirements.\n\nBG-15\n\nA group of business terms providing information about the address to which goods and services invoiced were or are delivered.\nIn the case of pick-up, the deliver to address is the pick-up address. Sufficient components of the address are to be filled to comply with legal requirements.\n\nEXT-FR-FE-150",
+            "properties": {
+                "address_line1": {
+                    "description": "BT-35, BT-50, BT-64, BT-75, EXT-FR-FE-15, EXT-FR-FE-32, EXT-FR-FE-55, EXT-FR-FE-78, EXT-FR-FE-101, EXT-FR-FE-124, EXT-FR-FE-151, EXT-FR-FE-171\n\nThe main address line in an address.\nUsually the street name and number or post office box.",
+                    "type": "string"
+                },
+                "address_line2": {
+                    "description": "BT-36, BT-51, BT-65, BT-76, EXT-FR-FE-16, EXT-FR-FR-33, EXT-FR-FE-56, EXT-FR-FE-79, EXT-FR-FE-102, EXT-FR-FE-125, EXT-FR-FE-152, EXT-FR-FE-172\n\nAn additional address line in an address that can be used to give further details supplementing the main line.",
+                    "type": "string"
+                },
+                "address_line3": {
+                    "description": "BT-162, BT-163, BT-164, BT-165, EXT-FR-FE-17, EXT-FR-FE-34, EXT-FR-FE-57, EXT-FR-FE-80, EXT-FR-FE-103, EXT-FR-FE-126, EXT-FR-FE-153, EXT-FR-FE-173\n\nAn additional address line in an address that can be used to give further details supplementing the main line.",
+                    "type": "string"
+                },
+                "city": {
+                    "description": "BT-37, BT-52, BT-66, BT-77, EXT-FR-FE-19, EXT-FR-FE-35, EXT-FR-FE-58, EXT-FR-FE-82, EXT-FR-FE-104, EXT-FR-FE-127, EXT-FR-FE-154, EXT-FR-FE-174\n\nThe common name of the city, town or village, where the Seller/Buyer address is located.",
+                    "type": "string"
+                },
+                "country_code": {
+                    "description": "BT-40, BT-55, BT-69, BT-80, EXT-FR-FE-21, EXT-FR-FE-38, EXT-FR-FE-61, EXT-FR-FE-84, EXT-FR-FE-107, EXT-FR-FE-130, EXT-FR-FE-157, EXT-FR-FE-177\n\nA code that identifies the country.\nIf no tax representative is specified, this is the country where VAT is liable. The lists of valid countries are registered with the EN ISO 3166-1 Maintenance agency, “Codes for the representation of names of countries and their subdivisions”.",
+                    "type": "string"
+                },
+                "country_subdivision": {
+                    "description": "BT-39, BT-54, BT-68, BT-79, EXT-FR-FE-20, EXT-FR-FE-37, EXT-FR-FE-60, EXT-FR-FE-83, EXT-FR-FE-106, EXT-FR-FE-129, EXT-FR-FE-156, EXT-FR-FE-176\n\nThe subdivision of a country.\nSuch as a region, a county, a state, a province, etc.",
+                    "type": "string"
+                },
+                "post_code": {
+                    "description": "BT-38, BT-53, BT-67, BT-78, EXT-FR-FE-18, EXT-FR-FE-36, EXT-FR-FE-59, EXT-FR-FE-81, EXT-FR-FE-105, EXT-FR-FE-128, EXT-FR-FE-155, EXT-FR-FE-175\n\nThe identifier for an addressable group of properties according to the relevant postal service.\nSuch as a ZIP code or a post code.",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "country_code"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "preceding_invoice_reference": {
+            "properties": {
+                "issue_date": {
+                    "description": "BT-26\n\nThe date when the Preceding Invoice was issued.\nThe Preceding Invoice issue date shall be provided in case the Preceding Invoice identifier is not unique.",
+                    "format": "date",
+                    "type": "string"
+                },
+                "preceding_invoice_type_code": {
+                    "$ref": "#/definitions/invoice_type_code"
+                },
+                "reference": {
+                    "description": "BT-25\n\nPreceding Invoice reference\nThe identification of an Invoice that was previously sent by the Seller.",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "reference"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "price_details": {
+            "description": "BG-29\n\nA group of business terms providing information about the price applied for the goods and services invoiced on the Invoice line.",
+            "properties": {
+                "discount_reason": {
+                    "description": "EXT-FR-FE-195\n\nDiscount reason\nReason for discount on unit price",
+                    "type": "string"
+                },
+                "discount_reason_code": {
+                    "description": "EXT-FR-FE-196\n\nDiscount reason code\nReason code for discount on unit price",
+                    "type": "string"
+                },
+                "item_gross_price": {
+                    "description": "BT-148\n\nItem gross price\nThe unit price, exclusive of VAT, before subtracting Item price discount.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "item_net_price": {
+                    "description": "BT-146\n\nItem net price\nThe price of an item, exclusive of VAT, after subtracting item price discount.\nThe Item net price has to be equal with the Item gross price less the Item price discount.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "item_price_base_quantity": {
+                    "description": "BT-149\n\nItem price base quantity\nThe number of item units to which the price applies.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "item_price_discount": {
+                    "deprecated": true,
+                    "description": "BT-147\n\nItem price discount\nThe total discount subtracted from the Item gross price to calculate the Item net price.\nOnly applies if the discount is provided per unit and if it is not included in the Item gross price.\nDeprecated: Use item_price_discounts instead",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "item_price_discounts": {
+                    "description": "BT-147\n\nItem price discount\nThe total discount subtracted from the Item gross price to calculate the Item net price.\nOnly applies if the discount is provided per unit and if it is not included in the Item gross price.",
+                    "items": {
+                        "format": "decimal",
+                        "type": "string",
+                        "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                    },
+                    "type": "array"
+                },
+                "quantity_unit_code": {
+                    "$ref": "#/definitions/unit_code"
+                }
+            },
+            "type": "object",
+            "additionalProperties": false
+        },
+        "process_control": {
+            "description": "BG-2\n\nA group of business terms providing information on the business process and rules applicable to the Invoice document.",
+            "properties": {
+                "business_process_type": {
+                    "description": "BT-23\n\nBusiness process type\nIdentifies the business process context in which the transaction appears, to enable the Buyer to process the Invoice in an appropriate way.\nTo be specified by the Buyer.",
+                    "type": "string"
+                },
+                "specification_identifier": {
+                    "description": "BT-24\n\nSpecification identifier\nAn identification of the specification containing the total set of rules regarding semantic content, cardinalities and business rules to which the data contained in the instance document conforms.\nThis identifies compliance or conformance to this document. Compliant invoices specify: urn:cen.eu:en16931:2017. Invoices, compliant to a user specification may identify that user specification here. No identification scheme is to be used.",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "specification_identifier"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "reason_code": {
+            "description": "BT-98, BT-105, BT-140, BT-145, BT-177, BT-193\n\nDocument level allowance/charge reason code\nThe reason for the document level allowance/charge, expressed as a code.\nUse entries of the UNTDID 5189 code list [6]. The Document level allowance/charge reason code and the Document level allowance/charge reason shall indicate the same allowance/charge reason.",
+            "type": "string"
+        },
+        "seller": {
+            "description": "BG-4\n\nA group of business terms providing information about the Seller.\n\nEXT-FR-FE-BG-12\n\nSeller\nGroup of business terms providing information about the Seller on the line\nIn the case of a Multi-Seller invoice, the Seller can be identified on the line",
+            "properties": {
+                "additional_legal_information": {
+                    "description": "BT-33\n\nSeller additional legal information\nAdditional legal information relevant for the Seller.\nSuch as share capital.",
+                    "type": "string"
+                },
+                "contact": {
+                    "$ref": "#/definitions/contact"
+                },
+                "electronic_address": {
+                    "$ref": "#/definitions/electronic_address"
+                },
+                "identifiers": {
+                    "description": "BT-29, EXT-FR-FE-166\n\nSeller identifier\nAn identification of the Seller\nFor many systems, the Seller identifier is a key piece of information. Multiple Seller identifiers may be assigned or specified. They may be differentiated by using various identification schemes. If no scheme is specified, it should be known by Buyer and Seller, e.g. a previously exchanged Buyer assigned identifier of the Seller.\nThe identification scheme identifier of the Seller identifier.\nIf used, the identification scheme identifier shall be chosen from the entries of the list published by the ISO/IEC 6523 maintenance agency.",
+                    "items": {
+                        "$ref": "#/definitions/identifier"
+                    },
+                    "type": "array"
+                },
+                "legal_registration_identifier": {
+                    "$ref": "#/definitions/legal_registration_identifier"
+                },
+                "name": {
+                    "description": "BT-27, BT-44, BT-59, EXT-FR-FE-03, EXT-FR-FE-43, EXT-FR-FE-66, EXT-FR-FE-89, EXT-FR-FE-112, EXT-FR-FE-164\n\nThe full formal name by which the Seller is registered in the national registry of legal entities or as a Taxable person or otherwise trades as a person or persons.",
+                    "type": "string"
+                },
+                "postal_address": {
+                    "$ref": "#/definitions/postal_address"
+                },
+                "tax_registration_identifier": {
+                    "description": "BT-32, EXT-FR-FE-169\n\nSeller tax registration identifier\nThe local identification (defined by the Seller’s address) of the Seller for tax purposes or a reference that enables the Seller to state his registered tax status.\nThis information may affect how the Buyer settles the payment (such as for social security fees). E.g. in some countries, if the Seller is not registered as a tax paying entity then the Buyer is required to withhold the amount of the tax and pay it on behalf of the Seller.",
+                    "type": "string"
+                },
+                "trading_name": {
+                    "description": "BT-28, EXT-FR-FE-165\n\nSeller trading name\nA name by which the Seller is known, other than Seller name (also known as Business name).\nThis may be used if different from the Seller name.",
+                    "type": "string"
+                },
+                "vat_identifier": {
+                    "description": "BT-31, EXT-FR-FE-168\n\nSeller VAT identifier\nThe Seller's VAT identifier (also known as Seller VAT identification number).\nVAT number prefixed by a country code. A VAT registered Supplier shall include his VAT ID, except when he uses a tax representative.",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "name",
+                "electronic_address",
+                "postal_address"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "seller_tax_representative_party": {
+            "description": "BG-11\n\nA group of business terms providing information about the Seller's tax representative.",
+            "properties": {
+                "name": {
+                    "description": "BT-62\n\nSeller tax representative name\nThe full name of the Seller's tax representative party.",
+                    "type": "string"
+                },
+                "postal_address": {
+                    "$ref": "#/definitions/postal_address"
+                },
+                "vat_identifier": {
+                    "description": "BT-63\n\nSeller tax representative VAT identifier\nThe VAT identifier of the Seller's tax representative party.\nVAT number prefixed by a country code based on EN ISO 3166-1 \"Codes for the representation of names of countries and their subdivisions\".",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "name",
+                "vat_identifier",
+                "postal_address"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "shipping_notice": {
+            "description": "EXT-FR-FE-BG-07",
+            "properties": {
+                "date": {
+                    "description": "EXT-FR-FE-201",
+                    "format": "date",
+                    "type": "string"
+                },
+                "identifier": {
+                    "description": "EXT-FR-FE-140",
+                    "type": "string"
+                },
+                "line_identifier": {
+                    "description": "EXT-FR-FE-141",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "identifier"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "totals": {
+            "description": "BG-22\n\nA group of business terms providing the monetary totals for the Invoice.",
+            "properties": {
+                "amount_due_for_payment": {
+                    "description": "BT-115\n\nAmount due for payment\nThe outstanding amount that is requested to be paid.\nThis amount is the Invoice total amount with VAT minus the paid amount that has been paid in advance. The amount is zero in case of a fully paid Invoice. The amount may be negative; in that case the Seller owes the amount to the Buyer.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "paid_amount": {
+                    "description": "BT-113\n\nPaid amount\nThe sum of amounts which have been paid in advance.\nThis amount is subtracted from the invoice total amount with VAT to calculate the amount due for payment.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "rounding_amount": {
+                    "description": "BT-114\n\nRounding amount\nThe amount to be added to the invoice total to round the amount to be paid.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "sum_allowances_amount": {
+                    "description": "BT-107\n\nSum of allowances on document level\nSum of all allowances on document level in the Invoice.\nAllowances on line level are included in the Invoice line net amount which is summed up into the Sum of Invoice line net amount.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "sum_charges_amount": {
+                    "description": "BT-108\n\nSum of charges on document level\nSum of all charges on document level in the Invoice.\nCharges on line level are included in the Invoice line net amount which is summed up into the Sum of Invoice line net amount.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "sum_invoice_lines_amount": {
+                    "description": "BT-106\n\nSum of Invoice line net amount\nSum of all Invoice line net amounts in the Invoice.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "total_vat_amount": {
+                    "$ref": "#/definitions/amount"
+                },
+                "total_vat_amount_accounting_currency": {
+                    "$ref": "#/definitions/amount"
+                },
+                "total_with_vat": {
+                    "description": "BT-112\n\nInvoice total amount with VAT\nThe total amount of the Invoice with VAT.\nThe Invoice total amount with VAT is the Invoice total amount without VAT plus the Invoice total VAT amount.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "total_without_vat": {
+                    "description": "BT-109\n\nInvoice total amount without VAT\nThe total amount of the Invoice without VAT.\nThe Invoice total amount without VAT is the Sum of Invoice line net amount minus Sum of allowances on document level plus Sum of charges on document level.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                }
+            },
+            "required": [
+                "sum_invoice_lines_amount",
+                "total_without_vat",
+                "total_with_vat",
+                "amount_due_for_payment"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "unit_code": {
+            "description": "BT-130\n\nInvoiced quantity unit of measure code\nThe unit of measure that applies to the invoiced quantity.\nThe unit of measure shall be chosen from the lists in UN/ECE Recommendation N°. 20 “Codes for Units of Measure Used in International Trade” [7] and UN/ECE Recommendation N° 21 “Codes for Passengers, Types of Cargo, Packages and Packaging Materials (with Complementary Codes for Package Names)” [19] applying the method described in UN/ECE Rec N° 20 Intro 2.a). Note that in most cases it is not needed for Buyers and Sellers to implement these lists fully in their software. Sellers need only to support the units needed for their goods and services; Buyers only need to verify that the units used in the Invoice are equal to the units used in other documents (such as Contract, Catalogue, Order and Despatch advice).\n\nBT-150\n\nItem price base quantity unit of measure code\nThe unit of measure that applies to the Item price base quantity.\nThe Item price base quantity unit of measure shall be the same as the Invoiced quantity unit of measure (BT-130).",
+            "type": "string"
+        },
+        "vat_break_down": {
+            "properties": {
+                "vat_category_code": {
+                    "$ref": "#/definitions/vat_category_code"
+                },
+                "vat_category_rate": {
+                    "description": "BT-119\n\nVAT category rate\nThe VAT rate, represented as percentage that applies for the relevant VAT category.\nThe VAT category code and the VAT category rate shall be consistent.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "vat_category_tax_amount": {
+                    "description": "BT-117\n\nVAT category tax amount\nThe total VAT amount for a given VAT category.\nCalculated by multiplying the VAT category taxable amount with the VAT category rate for the relevant VAT category.",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "vat_category_taxable_amount": {
+                    "description": "BT-116\n\nVAT category taxable amount\nSum of all taxable amounts subject to a specific VAT category code and VAT category rate (if the VAT category rate is applicable).\nThe sum of Invoice line net amount minus allowances plus charges on document level which are subject to a specific VAT category code and VAT category rate (if the VAT category rate is applicable).",
+                    "format": "decimal",
+                    "type": "string",
+                    "pattern": "^-?[0-9]+(?:\\.[0-9]+)?(?![\\s\\S])"
+                },
+                "vat_exemption_reason": {
+                    "description": "BT-120\n\nVAT exemption reason text\nA textual statement of the reason why the amount is exempted from VAT or why no VAT is being charged\nArticles 226 items 11 to 15 Directive 2006/112/EC [2].",
+                    "type": "string"
+                },
+                "vat_exemption_reason_code": {
+                    "$ref": "#/definitions/vat_exemption_reason_code"
+                },
+                "vat_identifier": {
+                    "description": "BT-118-0\n\nVAT type code identifier qualifier",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "vat_category_taxable_amount",
+                "vat_category_tax_amount",
+                "vat_category_code"
+            ],
+            "type": "object",
+            "additionalProperties": false
+        },
+        "vat_category_code": {
+            "description": "AE: VAT Reverse charge\nE: Exempt from tax\nG: Free export item, tax not charge\nK: VAT exempt for EEA intra-community supply of goods and services\nL: Canary Islands General Indirect Tax\nM: Tax for production, services and importation in Ceuta and Melilla\nO: Service outside scope of tax\nS: Standard rate\nZ: Zero rated goods\n\nBT-95, BT-102\n\nDocument level allowance/charge VAT category code\nA coded identification of what VAT category applies to the document level allowance/charge.\nThe following entries of UNTDID 5305 [6] are used (further clarification between brackets):\n- Standard rate (Liable for VAT in a standard way)\n- Zero rated goods (Liable for VAT with a percentage rate of zero)\n- Exempt from tax (VAT/IGIC/IPSI)\n- VAT Reverse Charge (Reverse charge VAT/IGIC/IPSI rules apply)\n- VAT exempt for intra community supply of goods (VAT/IGIC/IPSI not levied due to Intra-community supply rules)\n- Free export item, tax not charged (VAT/IGIC/IPSI not levied due to export outside of the EU)\n- Services outside scope of tax (Sale is not subject to VAT/IGIC/IPSI)\n- Canary Islands General Indirect Tax (Liable for IGIC tax)\n- Liable for IPSI (Ceuta/Melilla tax)\n\nBT-118\n\nVAT category code\nCoded identification of a VAT category.\nThe following entries of UNTDID 5305 [6] are used (further clarification between brackets):\n- Standard rate (Liable for VAT in a standard way)\n- Zero rated goods (Liable for VAT with a percentage rate of zero)\n- Exempt from tax (VAT/IGIC/IPSI)\n- VAT Reverse Charge (Reverse charge VAT/IGIC/IPSI rules apply)\n- VAT exempt for intra community supply of goods (VAT/IGIC/IPSI not levied due to Intra-community supply rules)\n- Free export item, tax not charged (VAT/IGIC/IPSI not levied due to export outside of the EU)\n- Services outside scope of tax (Sale is not subject to VAT/IGIC/IPSI)\n- Canary Islands General Indirect Tax (Liable for IGIC tax)\n- Liable for IPSI (Ceuta/Melilla tax)\n\nBT-151\n\nInvoiced item VAT category code\nThe VAT category code for the invoiced item.\nThe following entries of UNTDID 5305 [6] are used (further clarification between brackets):\n- Standard rate (Liable for VAT in a standard way)\n- Zero rated goods (Liable for VAT with a percentage rate of zero)\n- Exempt from tax (VAT/IGIC/IPSI)\n- VAT Reverse Charge (Reverse charge VAT/IGIC/IPSI rules apply)\n- VAT exempt for intra community supply of goods (VAT/IGIC/IPSI not levied due to Intra-community supply rules)\n- Free export item, tax not charged (VAT/IGIC/IPSI not levied due to export outside of the EU)\n- Services outside scope of tax (Sale is not subject to VAT/IGIC/IPSI)\n- Canary Islands General Indirect Tax (Liable for IGIC tax)\n- Liable for IPSI (Ceuta/Melilla tax)",
+            "enum": [
+                "AE",
+                "E",
+                "G",
+                "K",
+                "L",
+                "M",
+                "O",
+                "S",
+                "Z"
+            ],
+            "type": "string"
+        },
+        "vat_exemption_reason_code": {
+            "description": "BT-121\n\nVAT exemption reason code\nA coded statement of the reason for why the amount is exempted from VAT.\nCode list issued and maintained by the Connecting Europe Facility.",
+            "type": "string"
+        }
+    }
+}
