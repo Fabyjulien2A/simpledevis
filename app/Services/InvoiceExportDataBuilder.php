@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Invoice;
+use App\Services\SuperPdp\FrenchSellerIdentifiers;
 use InvalidArgumentException;
 
 class InvoiceExportDataBuilder
@@ -40,7 +41,7 @@ class InvoiceExportDataBuilder
     /**
      * Lecture électronique distincte de l'export historique en floats.
      * Relire le stockage : des relations déjà chargées ne prouvent pas l'absence de règlement.
-     * L'autorisation d'accès relève de l'appelant. Aucune écriture ni qualification fiscale ici.
+     * L'autorisation d'accès relève de l'appelant. Aucune écriture ni déduction de régime.
      */
     public function buildElectronic(Invoice $invoice): array
     {
@@ -49,13 +50,23 @@ class InvoiceExportDataBuilder
         }
 
         $stored = $invoice->newQuery()->with([
-            'client', 'user.company',
             'items' => fn ($query) => $query->orderBy('id'),
             'payments' => fn ($query) => $query->orderBy('id'),
             'creditNotes' => fn ($query) => $query->where('status', 'issued')->orderBy('id'),
         ])->findOrFail($invoice->getKey());
 
-        return array_merge($this->partyData($stored), [
+        $snapshot = $stored->getRawOriginal('party_snapshot');
+        if ($snapshot !== null) {
+            $parties = InvoiceElectronicPartyData::resolve(['party_snapshot' => $snapshot]);
+        } else {
+            // Compatibilité de lecture historique uniquement ; le builder bloque cette source.
+            $stored->load('client', 'user.company');
+            $parties = $this->legacyElectronicParties($stored);
+            $parties['party_snapshot'] = null;
+        }
+
+        return array_merge($parties, [
+            'french_business_process_type' => $stored->french_business_process_type,
             'invoice_number' => $stored->invoice_number,
             'date' => $stored->date?->format('Y-m-d'),
             'due_date' => $stored->due_date?->format('Y-m-d'),
@@ -73,13 +84,44 @@ class InvoiceExportDataBuilder
         ]);
     }
 
+    private function legacyElectronicParties(Invoice $stored): array
+    {
+        $parties = $this->partyData($stored);
+        $company = $stored->user?->company;
+        // Mapping documenté de la franchise déclarée, sans numéro de TVA dans
+        // l'une ou l'autre colonne. Ne jamais attribuer un régime ou un numéro de TVA.
+        if ($company?->vat_regime === 'franchise'
+            && trim((string) $company->vat_number) === ''
+            && trim((string) $company->tva_number) === '') {
+            try {
+                $parties['seller']['tax_registration_identifier'] = FrenchSellerIdentifiers::sirenFromSiret(
+                    trim((string) $company->siret)
+                );
+            } catch (InvalidArgumentException) {
+                // Garder le SIRET original pour les erreurs explicites du diagnostic/builder.
+                // Aucun BT-32 n'est inventé si son extraction est impossible.
+            }
+        }
+
+        return array_merge($parties, [
+            // Métadonnée locale du diagnostic, distincte des champs du payload EN16931.
+            'company_vat_regime' => $stored->user?->company?->vat_regime,
+            // Textes persistés uniquement ; aucune reprise des PDF ou des scénarios fictifs.
+            'company_invoice_mentions' => [
+                'PMT' => $company?->invoice_recovery_indemnity_text,
+                'PMD' => $company?->invoice_late_payment_penalties_text,
+                'AAB' => $company?->invoice_early_payment_discount_text,
+            ],
+        ]);
+    }
+
     private function partyData(Invoice $invoice): array
     {
-        $company = $invoice->user->company;
+        $company = $invoice->user?->company;
 
         return [
             'seller' => [
-                'name' => $company?->company_name ?? $company?->name ?? $invoice->user->name,
+                'name' => $company?->company_name ?? $company?->name ?? $invoice->user?->name,
                 'address' => $company?->address,
                 'postal_code' => $company?->postal_code,
                 'city' => $company?->city,
@@ -96,17 +138,17 @@ class InvoiceExportDataBuilder
             ],
 
             'buyer' => [
-                'client_type' => $invoice->client->client_type,
-                'full_name' => $invoice->client->full_name,
-                'company_name' => $invoice->client->company_name,
-                'siret' => $invoice->client->siret,
-                'vat_number' => $invoice->client->vat_number,
-                'country_code' => $invoice->client->country_code,
-                'address' => $invoice->client->address,
-                'postal_code' => $invoice->client->postal_code,
-                'city' => $invoice->client->city,
-                'email' => $invoice->client->email,
-                'phone' => $invoice->client->phone,
+                'client_type' => $invoice->client?->client_type,
+                'full_name' => $invoice->client?->full_name,
+                'company_name' => $invoice->client?->company_name,
+                'siret' => $invoice->client?->siret,
+                'vat_number' => $invoice->client?->vat_number,
+                'country_code' => $invoice->client?->country_code,
+                'address' => $invoice->client?->address,
+                'postal_code' => $invoice->client?->postal_code,
+                'city' => $invoice->client?->city,
+                'email' => $invoice->client?->email,
+                'phone' => $invoice->client?->phone,
             ],
 
         ];

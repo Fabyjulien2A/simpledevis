@@ -58,12 +58,12 @@ it('preserves note wording punctuation whitespace and newlines exactly', functio
         ->and($this->context)->toBe($before);
 });
 
-it('refuses a missing context before reading an invoice and never falls back to profile or PDF text', function () {
+it('refuses a missing context for a synthetic invoice and never falls back to profile or PDF text', function () {
     $this->data['seller']['payment_terms'] = '40 € dus en cas de retard de paiement. 10% du montant TTC. Néant.';
     $this->data['notes'] = $this->data['seller']['payment_terms'];
     $this->data['french_context'] = $this->context;
     $this->data['items'][0]['description'] = 'Prestation de service';
-    $this->source->expects($this->never())->method('buildElectronic');
+    $this->source->expects($this->once())->method('buildElectronic');
     try {
         $this->builder->build($this->invoice, $this->address);
         $this->fail('The caller must supply a context explicitly.');
@@ -163,4 +163,80 @@ it('changes only the explicitly supplied context and preserves all fiscal identi
     expect($second)->toBe($first)->and($this->data)->toBe($beforeData)
         ->and($this->invoice->getAttributes())->toBe($beforeInvoice)
         ->and($second['totals']['total_with_vat'])->toBe('72.00');
+});
+
+describe('persisted French mentions', function () {
+    beforeEach(function () {
+        $this->data['french_business_process_type'] = 'S1';
+        $this->data['company_invoice_mentions'] = array_column($this->context['notes'], 'note', 'subject_code');
+    });
+
+    it('uses stored notes with absent or identical manual notes in either order', function (string $mode) {
+        $context = match ($mode) {
+            'absent' => null,
+            'reversed' => ['notes' => array_reverse($this->context['notes'])],
+            default => $this->context,
+        };
+        $before = $this->data;
+        $payload = $this->builder->buildFromData($this->data, $this->address, frenchContext: $context);
+        expect($payload['notes'])->toBe($this->context['notes'])
+            ->and($payload['process_control']['business_process_type'])->toBe('S1')
+            ->and($this->data)->toBe($before);
+    })->with(['absent', 'identical', 'reversed']);
+
+    it('refuses each contradictory manual note even for a direct builder call', function (int $index, string $code, string $change) {
+        $this->context['notes'][$index]['note'] .= $change;
+        try {
+            $this->builder->build($this->invoice, $this->address, frenchContext: $this->context);
+            $this->fail('Manual notes must never replace stored mentions.');
+        } catch (ValidationException $exception) {
+            expect($exception->errors())->toHaveKey('french_context.notes.'.$code)
+                ->and($exception->errors()['french_context.notes.'.$code][0])->toContain('contredit');
+        }
+    })->with([[0, 'PMT'], [1, 'PMD'], [2, 'AAB']])->with(['Autre texte', ' ', "\n", '.']);
+
+    it('rejects missing blank invalid or oversized stored notes despite valid manual notes', function (string $code, mixed $value) {
+        $this->data['company_invoice_mentions'][$code] = $value;
+        expect(fn () => $this->builder->buildFromData($this->data, $this->address, frenchContext: $this->context))
+            ->toThrow(ValidationException::class);
+    })->with(['PMT', 'PMD', 'AAB'])->with([[null], [''], [' '], ["\u{00A0}"], [false], [42], [[]], [str_repeat('é', 2001)]]);
+
+    it('rejects missing stored mention metadata or keys despite complete manual notes', function (?string $code) {
+        if ($code === null) {
+            unset($this->data['company_invoice_mentions']);
+        } else {
+            unset($this->data['company_invoice_mentions'][$code]);
+        }
+        expect(fn () => $this->builder->buildFromData($this->data, $this->address, frenchContext: $this->context))
+            ->toThrow(ValidationException::class);
+    })->with([null, 'PMT', 'PMD', 'AAB']);
+
+    it('still rejects malformed incomplete duplicate or unknown manual notes', function (string $case) {
+        $this->context['notes'] = match ($case) {
+            'null' => null,
+            'empty' => [],
+            'incomplete' => array_slice($this->context['notes'], 1),
+            'duplicate' => [...$this->context['notes'], $this->context['notes'][0]],
+            'unknown' => [...$this->context['notes'], ['subject_code' => 'TXT', 'note' => 'Texte']],
+            'property' => [array_merge($this->context['notes'][0], ['other' => 'Texte']), ...array_slice($this->context['notes'], 1)],
+        };
+        expect(fn () => $this->builder->buildFromData($this->data, $this->address, frenchContext: $this->context))
+            ->toThrow(ValidationException::class);
+    })->with(['null', 'empty', 'incomplete', 'duplicate', 'unknown', 'property']);
+
+    it('preserves exact stored wording and accepts the stored character limit', function () {
+        $this->data['company_invoice_mentions'] = ['PMT' => str_repeat('é', 2000), 'PMD' => "  Première ligne.\nDeuxième ligne.  ", 'AAB' => 'Sans escompte.'];
+        $payload = $this->builder->buildFromData($this->data, $this->address);
+        expect(array_column($payload['notes'], 'note', 'subject_code'))->toBe($this->data['company_invoice_mentions']);
+    });
+
+    it('keeps stored business process protection when manual mentions agree', function () {
+        $this->context['business_process_type'] = 'B1';
+        try {
+            $this->builder->buildFromData($this->data, $this->address, frenchContext: $this->context);
+            $this->fail('The stored business process must remain authoritative.');
+        } catch (ValidationException $exception) {
+            expect($exception->errors())->toHaveKey('french_context.business_process_type');
+        }
+    });
 });

@@ -16,11 +16,18 @@ beforeEach(function () {
     $data = SuperPdpPayloadFixture::data();
     $this->user = User::factory()->create();
     $this->user->company()->create(array_diff_key($data['seller'], array_flip(['name', 'country_code'])) + ['company_name' => 'Atelier Martin']);
+    $notes = array_column(SuperPdpPayloadFixture::frenchContext()['notes'], 'note', 'subject_code');
+    $this->user->company()->update([
+        'invoice_recovery_indemnity_text' => $notes['PMT'],
+        'invoice_late_payment_penalties_text' => $notes['PMD'],
+        'invoice_early_payment_discount_text' => $notes['AAB'],
+    ]);
     $client = $this->user->clients()->create(array_diff_key($data['buyer'], ['full_name' => true]) + [
         'first_name' => 'Marie', 'last_name' => 'Dupont',
     ]);
     $this->invoice = Invoice::create([
         'user_id' => $this->user->id, 'client_id' => $client->id,
+        'french_business_process_type' => 'S1',
         'invoice_number' => $data['invoice_number'], 'date' => $data['date'], 'due_date' => $data['due_date'],
         'document_status' => 'issued', 'calculation_version' => 'decimal-v1', 'status' => 'non_payee', 'amount_paid' => '0.00',
         ...$data['totals'],
@@ -28,6 +35,9 @@ beforeEach(function () {
     $this->invoice->items()->create(array_diff_key($data['items'][0], ['id' => true]));
     $this->address = ['scheme' => '0225', 'value' => '732829320_ATELIER'];
     $this->builder = app(SuperPdpInvoicePayloadBuilder::class);
+    $captured = app(InvoiceExportDataBuilder::class)->buildElectronic($this->invoice);
+    $captured['company_vat_regime'] = 'subject_to_vat';
+    DB::table('invoices')->where('id', $this->invoice->id)->update(['party_snapshot' => SuperPdpPayloadFixture::partySnapshot($captured)]);
 });
 
 it('reads fresh decimal data and performs only SELECTs without altering the caller or storage', function () {
@@ -131,10 +141,19 @@ it('keeps the existing legacy export contract while providing a separate electro
         ->and($electronic['totals']['total_ttc'])->toBe('72.00');
 });
 
-it('requires explicitly supplied French context for stored invoices even when profile and invoice contain legal text', function () {
+it('never fills absent stored mentions from free text or manual context', function () {
     $pdfTexts = '40 € dus en cas de retard de paiement. 10% du montant TTC. Néant.';
+    DB::table('invoices')->where('id', $this->invoice->id)->update(['french_business_process_type' => 'B1']);
     $this->invoice->update(['notes' => $pdfTexts]);
-    $this->user->company()->update(['payment_terms' => $pdfTexts]);
+    $this->user->company()->update([
+        'payment_terms' => $pdfTexts, 'invoice_recovery_indemnity_text' => null,
+        'invoice_late_payment_penalties_text' => null, 'invoice_early_payment_discount_text' => null,
+    ]);
+    $snapshot = json_decode($this->invoice->fresh()->getRawOriginal('party_snapshot'));
+    foreach (['invoice_recovery_indemnity_text', 'invoice_late_payment_penalties_text', 'invoice_early_payment_discount_text'] as $field) {
+        $snapshot->seller->{$field} = null;
+    }
+    DB::table('invoices')->where('id', $this->invoice->id)->update(['party_snapshot' => json_encode($snapshot, JSON_THROW_ON_ERROR)]);
     $beforeInvoice = $this->invoice->fresh()->getRawOriginal();
     $beforeCompany = $this->user->company()->sole()->getRawOriginal();
     DB::connection()->beforeExecuting(function ($sql) {
@@ -145,11 +164,48 @@ it('requires explicitly supplied French context for stored invoices even when pr
     expect(fn () => $this->builder->build($this->invoice, $this->address))->toThrow(ValidationException::class);
     $context = SuperPdpPayloadFixture::frenchContext();
     $context['business_process_type'] = 'B1';
-    $payload = $this->builder->build($this->invoice, $this->address, frenchContext: $context);
-    expect($payload['notes'])->toBe($context['notes'])
-        ->and($payload['process_control']['business_process_type'])->toBe('B1')
-        ->and($payload['totals']['amount_due_for_payment'])->toBe('72.00')
-        ->and($this->invoice->fresh()->getRawOriginal())->toBe($beforeInvoice)
+    expect(fn () => $this->builder->build($this->invoice, $this->address, frenchContext: $context))->toThrow(ValidationException::class);
+    expect($this->invoice->fresh()->getRawOriginal())->toBe($beforeInvoice)
         ->and($this->user->company()->sole()->getRawOriginal())->toBe($beforeCompany);
     Http::assertNothingSent();
 });
+
+it('keeps captured owner mentions despite profile edits without changing caller relations or storage', function () {
+    $this->invoice->load('user.company');
+    $this->invoice->user->company->invoice_recovery_indemnity_text = 'Texte local non enregistré';
+    $this->user->company()->update(['invoice_recovery_indemnity_text' => "  Texte enregistré.\nSans reformulation.  "]);
+    $other = User::factory()->create();
+    $other->company()->create(['company_name' => 'Autre entreprise', 'invoice_recovery_indemnity_text' => 'Texte tiers']);
+    $this->actingAs($other);
+    $beforeCaller = $this->invoice->toArray();
+    $beforeCompany = $this->user->company()->sole()->getRawOriginal();
+    DB::connection()->beforeExecuting(function ($sql) {
+        if (! preg_match('/^\s*select\b/i', $sql)) {
+            throw new RuntimeException('Aucune écriture pendant la préparation électronique.');
+        }
+    });
+    $payload = $this->builder->build($this->invoice, $this->address);
+    expect($payload['notes'][0]['note'])->toBe(SuperPdpPayloadFixture::frenchContext()['notes'][0]['note'])
+        ->and($this->invoice->toArray())->toBe($beforeCaller)
+        ->and($this->user->company()->sole()->getRawOriginal())->toBe($beforeCompany);
+    Http::assertNothingSent();
+});
+
+it('rejects a contradictory stored invoice context without writing any data', function (int $index, string $code) {
+    $context = SuperPdpPayloadFixture::frenchContext();
+    $context['notes'][$index]['note'] = 'Mention manuelle contradictoire';
+    $before = $this->user->company()->sole()->getRawOriginal();
+    DB::connection()->beforeExecuting(function ($sql) {
+        if (! preg_match('/^\s*select\b/i', $sql)) {
+            throw new RuntimeException('Aucune écriture pendant la préparation électronique.');
+        }
+    });
+    try {
+        $this->builder->build($this->invoice, $this->address, frenchContext: $context);
+        $this->fail('Persisted mentions must not be replaced.');
+    } catch (ValidationException $exception) {
+        expect($exception->errors())->toHaveKey('french_context.notes.'.$code);
+    }
+    expect($this->user->company()->sole()->getRawOriginal())->toBe($before);
+    Http::assertNothingSent();
+})->with([[0, 'PMT'], [1, 'PMD'], [2, 'AAB']]);

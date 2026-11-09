@@ -37,6 +37,12 @@
         <div class="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
 
             {{-- Message de succès --}}
+            @if(session('error'))
+                <div role="alert" class="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
+                    {{ session('error') }}
+                </div>
+            @endif
+
             @if(session('success'))
 
                 <div class="rounded-2xl border border-green-200 bg-green-50 px-5 py-4 text-sm font-medium text-green-700">

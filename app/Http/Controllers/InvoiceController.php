@@ -3,27 +3,38 @@
 namespace App\Http\Controllers;
 
 use App\Mail\InvoiceMail;
+use App\Models\Client;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Payment;
-use App\Services\InvoiceXmlGenerator;
 use App\Services\InvoiceLinePreparationService;
+use App\Services\InvoicePartySnapshotCapture;
 use App\Services\InvoicePdfRenderer;
-use Illuminate\Support\Str;
-use Symfony\Component\HttpFoundation\HeaderUtils;
+use App\Services\InvoiceXmlGenerator;
+use App\Services\SuperPdp\SuperPdpEmissionEligibilityDiagnostic;
+use Brick\Math\BigDecimal;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\View\View;
-use App\Models\Client;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
-use Brick\Math\BigDecimal;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 
 class InvoiceController extends Controller
 {
+    public function __construct(private readonly InvoicePartySnapshotCapture $snapshotCapture) {}
+
+    private const FRENCH_BUSINESS_PROCESS_MESSAGES = [
+        'french_business_process_type.required_if' => 'Sélectionnez un cadre de facturation avant la validation définitive.',
+        'french_business_process_type.required' => 'Sélectionnez et enregistrez le cadre de facturation sur le brouillon avant sa validation définitive.',
+        'french_business_process_type.string' => 'Le cadre de facturation doit être B1, S1 ou M1, ou rester non renseigné sur un brouillon.',
+        'french_business_process_type.in' => 'Le cadre de facturation doit être B1, S1 ou M1.',
+    ];
 
     public function index(Request $request): View
     {
@@ -65,16 +76,22 @@ class InvoiceController extends Controller
         return view('invoices.index', compact('invoices'));
     }
 
-
-    public function show(Invoice $invoice): View
+    public function show(Invoice $invoice, SuperPdpEmissionEligibilityDiagnostic $diagnostic): View
     {
         if ($invoice->user_id !== auth()->id()) {
             abort(403);
         }
 
+        // Autoriser aussi les données relues avant tout diagnostic.
+        $invoice = Invoice::whereKey($invoice->id)->firstOrFail();
+        abort_unless($invoice->user_id === auth()->id(), 403);
         $invoice->load('client', 'quote', 'items', 'payments');
 
-        return view('invoices.show', compact('invoice'));
+        // Le diagnostic relit le régime déclaré du profil. Ne pas inventer les autres
+        // données de contexte à partir des montants, notes libres ou paramètres HTTP.
+        $emissionDiagnostic = $diagnostic->diagnose($invoice);
+
+        return view('invoices.show', compact('invoice', 'emissionDiagnostic'));
     }
 
     public function handleAction(Request $request, Invoice $invoice): RedirectResponse
@@ -222,7 +239,6 @@ class InvoiceController extends Controller
 
             $invoice->load('payments');
 
-
             $validated = $request->validate([
                 'amount' => ['required', 'numeric', 'min:0.01'],
                 'method' => ['required', 'string'],
@@ -334,10 +350,9 @@ class InvoiceController extends Controller
             ->header('Content-Type', 'application/xml; charset=UTF-8')
             ->header(
                 'Content-Disposition',
-                'attachment; filename="facture-' . $invoice->invoice_number . '.xml"'
+                'attachment; filename="facture-'.$invoice->invoice_number.'.xml"'
             );
     }
-
 
     public function create(): View
     {
@@ -353,6 +368,7 @@ class InvoiceController extends Controller
     {
         $validated = $request->validate([
             'action' => ['required', 'in:draft,issue'],
+            'french_business_process_type' => ['bail', 'required_if:action,issue', 'nullable', 'string', Rule::in(Invoice::FRENCH_BUSINESS_PROCESS_TYPES)],
             'client_id' => ['required', 'exists:clients,id'],
             'date' => ['required', 'date'],
             'due_date' => ['nullable', 'date', 'after_or_equal:date'],
@@ -361,7 +377,7 @@ class InvoiceController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*' => ['required', 'array'],
             'items.*.tax_treatment' => ['required', 'string', 'in:taxable,franchise,exempt,zero_rated'],
-        ]);
+        ], self::FRENCH_BUSINESS_PROCESS_MESSAGES);
 
         $client = Client::where('user_id', auth()->id())
             ->findOrFail($validated['client_id']);
@@ -369,20 +385,21 @@ class InvoiceController extends Controller
         $prepared = $linePreparation->prepare($this->translateFiscalItems($request->input('items')));
 
         DB::transaction(function () use ($validated, $client, $prepared) {
+            if ($validated['action'] === 'issue') {
+                // Même ordre de verrouillage que la finalisation : utilisateur, facture.
+                DB::table('users')->where('id', auth()->id())->lockForUpdate()->firstOrFail();
+            }
 
             $invoice = Invoice::create([
                 'user_id' => auth()->id(),
                 'client_id' => $client->id,
                 'quote_id' => null,
-                'invoice_number' => $validated['action'] === 'issue'
-                    ? Invoice::generateInvoiceNumber((int) auth()->id())
-                    : null,
+                'invoice_number' => null,
                 'date' => $validated['date'],
                 'due_date' => $validated['due_date'] ?? now()->addDays(30)->toDateString(),
                 'status' => 'non_payee',
-                'document_status' => $validated['action'] === 'issue'
-                    ? 'issued'
-                    : 'draft',
+                'document_status' => 'draft',
+                'french_business_process_type' => $validated['french_business_process_type'] ?? null,
                 'calculation_version' => 'decimal-v1',
                 'subtotal_ht' => $prepared['totals']['total_ht'],
                 'total_tva' => $prepared['totals']['total_vat'],
@@ -393,6 +410,19 @@ class InvoiceController extends Controller
 
             foreach ($prepared['items'] as $item) {
                 $invoice->items()->create($item);
+            }
+
+            if ($validated['action'] === 'issue') {
+                // La création directe contrôle elle aussi le choix déjà enregistré.
+                $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+                abort_unless($invoice->user_id === auth()->id(), 403);
+                abort_unless($invoice->isDraft(), 409, 'Seul un brouillon peut être validé.');
+                $this->validateStoredFrenchBusinessProcessType($invoice);
+                $this->snapshotCapture->captureForFinalization($invoice);
+                $invoice->update([
+                    'invoice_number' => Invoice::generateInvoiceNumber((int) $invoice->user_id),
+                    'document_status' => 'issued',
+                ]);
             }
         });
 
@@ -451,16 +481,18 @@ class InvoiceController extends Controller
                     'Un brouillon comportant un règlement ou un statut de paiement incohérent ne peut pas être modifié.');
 
                 $validated = $request->validate([
+                    'french_business_process_type' => ['bail', 'nullable', 'string', Rule::in(Invoice::FRENCH_BUSINESS_PROCESS_TYPES)],
                     'client_id' => ['required', 'exists:clients,id'],
                     'date' => ['required', 'date'],
                     'due_date' => ['nullable', 'date', 'after_or_equal:date'],
                     'notes' => ['nullable', 'string'],
                     'items' => ['required', 'array', 'min:1'],
-                ]);
+                ], self::FRENCH_BUSINESS_PROCESS_MESSAGES);
                 $client = Client::where('user_id', auth()->id())->findOrFail($validated['client_id']);
                 $prepared = $linePreparation->prepare($this->translateFiscalItems($request->input('items')));
 
                 $invoice->update([
+                    'french_business_process_type' => array_key_exists('french_business_process_type', $validated) ? $validated['french_business_process_type'] : $invoice->french_business_process_type,
                     'client_id' => $client->id,
                     'date' => $validated['date'],
                     'due_date' => $validated['due_date'] ?? null,
@@ -479,6 +511,7 @@ class InvoiceController extends Controller
 
             // Parcours historique : mêmes règles et mêmes calculs, sans migration de version.
             $validated = $request->validate([
+                'french_business_process_type' => ['bail', 'nullable', 'string', Rule::in(Invoice::FRENCH_BUSINESS_PROCESS_TYPES)],
                 'client_id' => ['required', 'exists:clients,id'],
                 'date' => ['required', 'date'],
                 'due_date' => ['nullable', 'date', 'after_or_equal:date'],
@@ -489,7 +522,7 @@ class InvoiceController extends Controller
                 'items.*.quantity' => ['required', 'numeric', 'min:0.01'],
                 'items.*.unit_price_ht' => ['required', 'numeric', 'min:0'],
                 'items.*.tva_rate' => ['required', 'numeric', 'min:0'],
-            ]);
+            ], self::FRENCH_BUSINESS_PROCESS_MESSAGES);
 
             $client = Client::where('user_id', auth()->id())
                 ->findOrFail($validated['client_id']);
@@ -508,6 +541,7 @@ class InvoiceController extends Controller
             $totalTtc = $subtotalHt + $totalTva;
 
             $invoice->update([
+                'french_business_process_type' => array_key_exists('french_business_process_type', $validated) ? $validated['french_business_process_type'] : $invoice->french_business_process_type,
                 'client_id' => $client->id,
                 'date' => $validated['date'],
                 'due_date' => $validated['due_date'] ?? null,
@@ -595,7 +629,6 @@ class InvoiceController extends Controller
             ->with('success', 'Facture supprimée avec succès.');
     }
 
-
     public function finalize(Invoice $invoice, InvoiceLinePreparationService $linePreparation): RedirectResponse
     {
         if ($invoice->user_id !== auth()->id()) {
@@ -649,12 +682,16 @@ class InvoiceController extends Controller
                 }
             }
 
+            $this->validateStoredFrenchBusinessProcessType($lockedInvoice);
+            $this->snapshotCapture->captureForFinalization($lockedInvoice);
+
             // Attribuer son numéro uniquement au moment de la validation.
             $lockedInvoice->update([
                 'invoice_number' => Invoice::generateInvoiceNumber((int) $lockedInvoice->user_id),
                 'document_status' => 'issued',
                 'status' => 'non_payee',
             ]);
+
             return true;
         });
 
@@ -666,5 +703,12 @@ class InvoiceController extends Controller
         return redirect()
             ->route('invoices.show', $invoice)
             ->with('success', 'Facture validée définitivement avec succès.');
+    }
+
+    private function validateStoredFrenchBusinessProcessType(Invoice $invoice): void
+    {
+        Validator::make($invoice->only('french_business_process_type'), [
+            'french_business_process_type' => ['required', 'string', Rule::in(Invoice::FRENCH_BUSINESS_PROCESS_TYPES)],
+        ], self::FRENCH_BUSINESS_PROCESS_MESSAGES)->validate();
     }
 }

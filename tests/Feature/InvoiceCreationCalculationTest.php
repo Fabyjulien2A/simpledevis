@@ -17,6 +17,7 @@ beforeEach(function () {
         'tva_rate' => '10', 'unit_code' => 'HUR', 'tax_treatment' => 'taxable',
     ];
     $this->payload = [
+        'french_business_process_type' => 'S1',
         'action' => 'draft', 'client_id' => $this->client->id,
         'date' => '2026-11-05', 'due_date' => '2026-12-05',
         'notes' => 'Note conservée', 'items' => [$this->item],

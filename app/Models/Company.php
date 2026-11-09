@@ -26,6 +26,7 @@ class Company extends Model
         'siret',
         'vat_number',
         'tva_number',
+        'vat_regime',
         'address',
         'postal_code',
         'city',
@@ -36,6 +37,9 @@ class Company extends Model
         'iban',
         'bic',
         'payment_terms',
+        'invoice_recovery_indemnity_text',
+        'invoice_late_payment_penalties_text',
+        'invoice_early_payment_discount_text',
         'quote_validity',
     ];
 

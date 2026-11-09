@@ -105,7 +105,15 @@
                     <p class="text-sm text-gray-900 whitespace-pre-line">{{ $client->notes ?: 'Aucune note.' }}</p>
                 </div>
 
-                <div class="flex items-center gap-3 pt-4">
+                <div class="flex flex-wrap items-center gap-3 pt-4">
+                    @if($client->client_type === 'professional' && $client->country_code === 'FR')
+                        <form action="{{ route('clients.directory', $client) }}" method="POST">
+                            @csrf
+                            <button type="submit" class="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
+                                Consulter l'annuaire
+                            </button>
+                        </form>
+                    @endif
                     <a href="{{ route('clients.edit', $client) }}"
                        class="rounded-lg bg-yellow-500 px-4 py-2 text-white hover:bg-yellow-600">
                         Modifier
@@ -116,6 +124,8 @@
                         Retour
                     </a>
                 </div>
+
+                @include('clients.partials.directory-results')
             </div>
         </div>
     </div>

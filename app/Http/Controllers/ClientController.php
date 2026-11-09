@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
+use App\Models\Invoice;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 /**
@@ -168,7 +170,27 @@ class ClientController extends Controller
     {
         $this->authorizeClient($client);
 
-        $client->delete();
+        $deleted = DB::transaction(function () use ($client) {
+            // Comme la finalisation : utilisateur, factures, puis client.
+            DB::table('users')->where('id', auth()->id())->lockForUpdate()->firstOrFail();
+            $invoices = Invoice::where('client_id', $client->id)->orderBy('id')
+                ->lockForUpdate()->get(['id', 'document_status']);
+            $lockedClient = Client::whereKey($client->id)->lockForUpdate()->firstOrFail();
+            $this->authorizeClient($lockedClient);
+
+            if ($invoices->contains('document_status', 'issued')) {
+                return false;
+            }
+
+            $lockedClient->delete();
+
+            return true;
+        });
+
+        if (! $deleted) {
+            return redirect()->route('clients.index')->with('error',
+                'Ce client ne peut pas être supprimé car il possède au moins une facture définitive.');
+        }
 
         return redirect()
             ->route('clients.index')

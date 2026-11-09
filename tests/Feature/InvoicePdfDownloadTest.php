@@ -34,6 +34,9 @@ beforeEach(function () {
         'company_name' => 'Atelier Démonstration', 'address' => '12 rue des Artisans',
         'postal_code' => '69002', 'city' => 'Lyon', 'siret' => '73282932000074',
         'payment_terms' => 'Règlement à trente jours.',
+        'invoice_late_payment_penalties_text' => '10% du montant TTC.',
+        'invoice_recovery_indemnity_text' => '40 € dus en cas de retard de paiement.',
+        'invoice_early_payment_discount_text' => 'Néant.',
     ]);
     $client = $this->user->clients()->create(['first_name' => 'Marie', 'last_name' => 'Dupont']);
     $this->actingAs($this->user);
@@ -42,6 +45,7 @@ beforeEach(function () {
         'tva_rate' => '20', 'unit_code' => 'HUR', 'tax_treatment' => 'taxable',
     ];
     $this->payload = [
+        'french_business_process_type' => 'S1',
         'action' => 'issue', 'client_id' => $client->id, 'date' => '2026-11-05',
         'due_date' => '2026-12-05', 'items' => [$this->line], 'notes' => 'Note conservée.',
     ];
@@ -51,7 +55,7 @@ beforeEach(function () {
 
 it('downloads a real PDF with exact stored amounts and preserved legal information', function () {
     $response = $this->get(route('invoices.pdf', $this->invoice))->assertOk()->assertHeader('Content-Type', 'application/pdf');
-    expect($response->headers->get('Content-Disposition'))->toContain('attachment;', 'facture-' . $this->invoice->invoice_number . '.pdf')
+    expect($response->headers->get('Content-Disposition'))->toContain('attachment;', 'facture-'.$this->invoice->invoice_number.'.pdf')
         ->and($response->getContent())->toStartWith('%PDF-');
     $text = invoiceDownloadText($response->getContent());
     expect($text)->toContain('Atelier Démonstration', 'Marie Dupont', 'TVA applicable (S)', 'Heure (HUR)',
@@ -114,7 +118,9 @@ it('shows the exact remaining balance with payments and issued credits without w
         'status' => 'issued', 'reason' => 'Annulation partielle', 'subtotal_ht' => '10.00', 'total_tva' => '0.00', 'total_ttc' => '10.00',
     ]);
     $queries = [];
-    DB::listen(function ($query) use (&$queries) { $queries[] = $query->sql; });
+    DB::listen(function ($query) use (&$queries) {
+        $queries[] = $query->sql;
+    });
     $response = $this->get(route('invoices.pdf', $this->invoice))->assertOk();
     expect(invoiceDownloadText($response->getContent()))->toContain('0,30', '61,70', '72,00', '05/11/2026', '06/11/2026');
     foreach ($queries as $query) {
@@ -193,6 +199,6 @@ it('renders a multipage invoice with all rows totals and fiscal reasons preserve
         if (! is_dir($directory)) {
             mkdir($directory, 0777, true);
         }
-        file_put_contents($directory . '/invoice-preview.pdf', $content);
+        file_put_contents($directory.'/invoice-preview.pdf', $content);
     }
 });

@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\User;
+
 return [
 
     /*
@@ -40,7 +42,7 @@ return [
     */
 
     'stripe' => [
-        'model' => App\Models\User::class,
+        'model' => User::class,
         'key' => env('STRIPE_KEY'),
         'secret' => env('STRIPE_SECRET'),
 
@@ -57,6 +59,8 @@ return [
     */
 
     'superpdp' => [
+        // Origine seule : les requêtes SDK d'annuaire ajoutent /v1.beta.
+        'directory_base_url' => env('SUPERPDP_DIRECTORY_BASE_URL', 'https://api.superpdp.tech'),
         'client_id' => env('SUPERPDP_CLIENT_ID'),
         'client_secret' => env('SUPERPDP_CLIENT_SECRET'),
 

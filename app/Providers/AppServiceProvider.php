@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -19,6 +22,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        RateLimiter::for('client-directory', fn (Request $request) => Limit::perMinute(5)
+            ->by((string) $request->user()->id)
+            ->response(fn (Request $request, array $headers) => response(
+                'Trop de consultations de l’annuaire. Réessayez dans une minute.', 429, $headers
+            )));
     }
 }

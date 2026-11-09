@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Modèle facture.
@@ -15,6 +16,8 @@ use Illuminate\Support\Facades\DB;
  */
 class Invoice extends Model
 {
+    public const FRENCH_BUSINESS_PROCESS_TYPES = ['B1', 'S1', 'M1'];
+
     /**
      * Les attributs assignables en masse.
      *
@@ -30,6 +33,7 @@ class Invoice extends Model
         'due_date',
         'status',
         'document_status',
+        'french_business_process_type',
         'calculation_version',
         'subtotal_ht',
         'total_tva',
@@ -58,12 +62,46 @@ class Invoice extends Model
         'total_tva' => 'decimal:2',
         'total_ttc' => 'decimal:2',
         'amount_paid' => 'decimal:2',
+        'party_snapshot' => 'array',
 
         // Facturation électronique
         'is_electronic' => 'boolean',
         'xml_generated_at' => 'datetime',
         'sent_to_pdp_at' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        static::updating(function (Invoice $invoice) {
+            if (! $invoice->isDirty('party_snapshot')) {
+                return;
+            }
+
+            $stored = $invoice->newQuery()->whereKey($invoice->getKey())
+                ->first(['document_status', 'party_snapshot']);
+            if ($stored && ($stored->getRawOriginal('party_snapshot') !== null || $stored->isIssued())) {
+                throw ValidationException::withMessages([
+                    'party_snapshot' => 'L’instantané enregistré ne peut pas être remplacé et une facture définitive ne peut pas être historisée après coup.',
+                ]);
+            }
+        });
+
+        static::updating(function (Invoice $invoice) {
+            if (! $invoice->isDirty('french_business_process_type')) {
+                return;
+            }
+
+            // Relire aussi le statut : une instance de brouillon peut être périmée.
+            $stored = static::query()->whereKey($invoice->getKey())
+                ->first(['document_status', 'french_business_process_type']);
+            if ($stored?->isIssued()
+                && $invoice->french_business_process_type !== $stored->french_business_process_type) {
+                throw ValidationException::withMessages([
+                    'french_business_process_type' => 'Le cadre de facturation d’une facture définitive ne peut pas être modifié.',
+                ]);
+            }
+        });
+    }
 
     public function electronicInvoices(): HasMany
     {
@@ -110,7 +148,6 @@ class Invoice extends Model
         return $this->hasMany(Payment::class);
     }
 
-
     /**
      * Une facture peut posséder plusieurs avoirs.
      */
@@ -118,7 +155,6 @@ class Invoice extends Model
     {
         return $this->hasMany(CreditNote::class);
     }
-
 
     /**
      * Indique si la facture est en retard.
@@ -211,8 +247,6 @@ class Invoice extends Model
         ]);
     }
 
-
-
     /**
      * Indique si la facture est un brouillon.
      */
@@ -228,7 +262,6 @@ class Invoice extends Model
     {
         return $this->document_status === 'issued';
     }
-
 
     /**
      * Réserve le prochain numéro de facture pour un utilisateur.

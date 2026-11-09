@@ -111,6 +111,27 @@
         </div>
     </div>
 
+    <div>
+        <label for="french_business_process_type" class="block text-sm font-medium text-gray-700 mb-2">
+            Cadre français de facturation
+        </label>
+        <select id="french_business_process_type" name="french_business_process_type"
+                aria-describedby="french_business_process_type_help" class="w-full rounded-lg border-gray-300">
+            <option value="" @selected((old('french_business_process_type', $invoice->french_business_process_type ?? '') ?? '') === '')>Non renseigné</option>
+            <option value="B1" @selected(old('french_business_process_type', $invoice->french_business_process_type ?? '') === 'B1')>Biens — B1</option>
+            <option value="S1" @selected(old('french_business_process_type', $invoice->french_business_process_type ?? '') === 'S1')>Services — S1</option>
+            <option value="M1" @selected(old('french_business_process_type', $invoice->french_business_process_type ?? '') === 'M1')>Biens et services — M1</option>
+        </select>
+        <p id="french_business_process_type_help" class="mt-2 text-sm text-gray-500">
+            Choisissez le cadre correspondant à cette facture. Il n’est pas déduit des lignes ni de la TVA.
+            Vous pouvez laisser ce choix non renseigné sur un brouillon. Il doit être enregistré avant la validation définitive,
+            puis ne pourra plus être modifié. Ce choix ne constitue pas une validation réglementaire.
+        </p>
+        @error('french_business_process_type')
+            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+        @enderror
+    </div>
+
     {{-- Lignes facture --}}
     <div>
         <div class="mb-4 flex items-center justify-between">

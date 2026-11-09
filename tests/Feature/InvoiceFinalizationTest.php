@@ -22,6 +22,7 @@ beforeEach(function () {
         'tva_rate' => '20', 'unit_code' => 'HUR', 'tax_treatment' => 'taxable',
     ];
     $this->payload = [
+        'french_business_process_type' => 'S1',
         'action' => 'draft', 'client_id' => $client->id, 'date' => '2026-11-05',
         'due_date' => '2026-12-05', 'items' => [$this->item],
     ];
@@ -163,7 +164,7 @@ it('reloads issued status even for a stale draft model', function () {
 
 it('rolls back number reservation if issuing fails after allocation', function () {
     $fail = true;
-    Event::listen('eloquent.updating: ' . Invoice::class, function (Invoice $invoice) use (&$fail) {
+    Event::listen('eloquent.updating: '.Invoice::class, function (Invoice $invoice) use (&$fail) {
         if ($fail && $invoice->document_status === 'issued') {
             throw new RuntimeException('Simulated write failure');
         }

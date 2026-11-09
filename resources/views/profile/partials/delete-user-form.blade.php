@@ -27,6 +27,8 @@
                 {{ __('Êtes-vous sûr de vouloir supprimer votre compte ?') }}
             </p>
 
+            <x-input-error :messages="$errors->userDeletion->get('account')" class="mt-2" />
+
             <div class="mt-6">
                 <x-input-label for="password" value="{{ __('Mot de passe') }}" class="sr-only" />
 

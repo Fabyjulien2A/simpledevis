@@ -11,6 +11,7 @@ class InvoicePdfRenderer
     public function __construct(
         private readonly InvoicePdfDataBuilder $dataBuilder,
         private readonly FrenchDecimalFormatter $decimalFormatter,
+        private readonly InvoicePdfPartyData $partyData,
     ) {
     }
 
@@ -24,10 +25,11 @@ class InvoicePdfRenderer
     {
         $invoice = $invoice->newQuery()->with('client', 'quote', 'user.company')->findOrFail($invoice->getKey());
         $pdfData = $this->dataBuilder->build($invoice);
+        $pdfParties = $this->partyData->build($invoice);
         $company = $invoice->user->company;
         $decimalFormatter = $this->decimalFormatter;
 
-        $content = Pdf::loadView('invoices.pdf', compact('invoice', 'company', 'pdfData', 'decimalFormatter'))->output();
+        $content = Pdf::loadView('invoices.pdf', compact('invoice', 'company', 'pdfData', 'pdfParties', 'decimalFormatter'))->output();
 
         return [
             'content' => $content,

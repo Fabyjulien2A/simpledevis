@@ -2,17 +2,18 @@
 
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\ClientController;
+use App\Http\Controllers\ClientDirectoryController;
 use App\Http\Controllers\CompanySettingController;
+use App\Http\Controllers\CreditNoteController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QuoteController;
-use App\Http\Controllers\SubscriptionController;
-use App\Http\Controllers\SupplierInvoiceController;
-use App\Http\Controllers\SuperPdpController;
-use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ScheduleController;
-use App\Http\Controllers\CreditNoteController;
+use App\Http\Controllers\SubscriptionController;
+use App\Http\Controllers\SuperPdpController;
+use App\Http\Controllers\SupplierInvoiceController;
+use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
@@ -46,7 +47,7 @@ Route::view('/cgv', 'legal.cgv')
 |--------------------------------------------------------------------------
 */
 
-require __DIR__ . '/auth.php';
+require __DIR__.'/auth.php';
 
 /*
 |--------------------------------------------------------------------------
@@ -75,11 +76,11 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/invoices/{invoice}/credit-notes', [CreditNoteController::class, 'store'])
         ->name('credit-notes.store');
 
-        Route::get('/credit-notes/{creditNote}/pdf', [CreditNoteController::class, 'pdf'])
-    ->name('credit-notes.pdf');
+    Route::get('/credit-notes/{creditNote}/pdf', [CreditNoteController::class, 'pdf'])
+        ->name('credit-notes.pdf');
 
     Route::post('/credit-notes/{creditNote}/refund', [CreditNoteController::class, 'markAsRefunded'])
-    ->name('credit-notes.refund');
+        ->name('credit-notes.refund');
 
     /*
     |--------------------------------------------------------------------------
@@ -103,6 +104,10 @@ Route::middleware(['auth'])->group(function () {
     */
 
     Route::resource('clients', ClientController::class);
+
+    Route::post('/clients/{client}/annuaire', ClientDirectoryController::class)
+        ->middleware('throttle:client-directory')
+        ->name('clients.directory');
 
     /*
     |--------------------------------------------------------------------------

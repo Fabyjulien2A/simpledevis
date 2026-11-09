@@ -105,6 +105,8 @@
                 </div>
             @endif
 
+            @include('invoices.partials.emission-diagnostic', ['diagnostic' => $emissionDiagnostic])
+
             {{-- Avoir total : uniquement pour une facture définitive --}}
             @if(!$isDraft)
                 @php

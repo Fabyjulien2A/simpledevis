@@ -3,9 +3,11 @@
 namespace App\Services\SuperPdp;
 
 use App\Models\Invoice;
+use App\Services\InvoiceElectronicPartyData;
 use App\Services\InvoiceExportDataBuilder;
 use App\Services\InvoiceFiscalDataPreparer;
 use Brick\Math\BigDecimal;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 
 class SuperPdpInvoicePayloadBuilder
@@ -39,6 +41,29 @@ class SuperPdpInvoicePayloadBuilder
             throw new InvalidArgumentException('La facture doit posséder une date d’émission avant sa préparation pour SUPER PDP.');
         }
 
+        return $this->buildWithData(fn () => $this->dataBuilder->buildElectronic($invoice), $sellerElectronicAddress, $buyerElectronicAddress, $frenchContext, $invoice->exists);
+    }
+
+    /**
+     * Valide et construit un instantané fourni explicitement, sans base ni réseau.
+     * Ne prouve ni sa provenance, ni une autorisation d'émission ou un routage.
+     */
+    public function buildFromData(
+        array $data,
+        ?array $sellerElectronicAddress = null,
+        ?array $buyerElectronicAddress = null,
+        ?array $frenchContext = null
+    ): array {
+        return $this->buildWithData(fn () => $data, $sellerElectronicAddress, $buyerElectronicAddress, $frenchContext);
+    }
+
+    private function buildWithData(
+        callable $source,
+        ?array $sellerElectronicAddress,
+        ?array $buyerElectronicAddress,
+        ?array $frenchContext,
+        bool $persisted = false
+    ): array {
         if ($sellerElectronicAddress === null) {
             throw new InvalidArgumentException('L’adresse électronique de facturation du vendeur doit être fournie explicitement.');
         }
@@ -50,8 +75,10 @@ class SuperPdpInvoicePayloadBuilder
             'value' => $this->requiredString($sellerElectronicAddress, 'value', 'La valeur de l’adresse électronique du vendeur'),
         ];
 
-        $context = FrenchInvoiceContext::fromArray($frenchContext);
-        $data = $this->dataBuilder->buildElectronic($invoice);
+        $data = InvoiceElectronicPartyData::resolve($source(), $persisted);
+        $context = $persisted || array_key_exists('french_business_process_type', $data)
+            ? FrenchInvoiceContext::fromInvoiceData($data, $frenchContext)
+            : FrenchInvoiceContext::fromArray($frenchContext);
 
         // Contrôler aussi l'instantané relu, pas seulement le modèle fourni par l'appelant.
         if (($data['document_status'] ?? null) !== 'issued') {
@@ -59,6 +86,17 @@ class SuperPdpInvoicePayloadBuilder
         }
 
         $this->assertNoSettlement($data);
+        if (isset($data['party_snapshot'])) {
+            $taxBlockers = [];
+            (new FrenchInvoiceTaxRegime)->check($data, [], $taxBlockers);
+            if ($taxBlockers !== []) {
+                $errors = [];
+                foreach ($taxBlockers as $blocker) {
+                    $errors[$blocker['field']][] = $blocker['message'];
+                }
+                throw ValidationException::withMessages($errors);
+            }
+        }
         $fiscal = $this->fiscalPreparation->prepare(
             $data['items'] ?? [],
             $data['totals'] ?? [],
@@ -71,7 +109,7 @@ class SuperPdpInvoicePayloadBuilder
             'type_code' => 380,
             'currency_code' => 'EUR',
             // OpenAPI SUPER PDP 1.39.0.beta, process_control.specification_identifier (BT-24).
-            // BT-24 inchangé ; le cadre français BT-23 est fourni séparément par l'appelant.
+            // BT-24 inchangé ; BT-23 provient de la facture ou du scénario explicite.
             'process_control' => [
                 'specification_identifier' => 'urn:cen.eu:en16931:2017',
                 'business_process_type' => $context->businessProcessType,
@@ -186,9 +224,7 @@ class SuperPdpInvoicePayloadBuilder
         $name = $this->requiredString($data, 'name', 'Le nom du vendeur');
         $siret = $this->requiredString($data, 'siret', 'Le SIRET du vendeur');
 
-        if (! preg_match('/^[0-9]{14}$/D', $siret)) {
-            throw new InvalidArgumentException('Le SIRET du vendeur doit contenir exactement 14 chiffres.');
-        }
+        $siren = FrenchSellerIdentifiers::sirenFromSiret($siret);
 
         $countryCode = $this->requiredString($data, 'country_code', 'Le code pays du vendeur');
 
@@ -200,7 +236,7 @@ class SuperPdpInvoicePayloadBuilder
             'name' => $name,
             'legal_registration_identifier' => [
                 // BT-30 : SIREN de l'entreprise, extrait du SIRET validé sans conversion numérique.
-                'value' => substr($siret, 0, 9),
+                'value' => $siren,
                 'scheme' => '0002',
             ],
             'identifiers' => $this->buildSellerIdentifiers($data, $siret),
@@ -219,7 +255,7 @@ class SuperPdpInvoicePayloadBuilder
             $seller['vat_identifier'] = $vatNumber;
         }
 
-        // BT-32 is supplied explicitly by the caller; never infer a tax regime or identifier.
+        // BT-32 vient de la source (dont le mapping métier de franchise), jamais d'un régime déduit ici.
         $taxIdentifier = $this->optionalString($data, 'tax_registration_identifier', 'L’identifiant fiscal du vendeur');
         if ($taxIdentifier !== null) {
             $seller['tax_registration_identifier'] = $taxIdentifier;

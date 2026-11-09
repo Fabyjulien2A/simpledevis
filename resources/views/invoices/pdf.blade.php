@@ -188,7 +188,11 @@
                 default => '',
             };
             $unitLabels = ['C62' => 'Unité', 'HUR' => 'Heure', 'MTR' => 'Mètre'];
-            $companyName = $company->company_name ?? $company->name ?? $invoice->user->name;
+            $pdfParties ??= app(\App\Services\InvoicePdfPartyData::class)->build($invoice, $company ?? null);
+            $fromSnapshot = $pdfParties['from_snapshot'];
+            $pdfCompany = (object) $pdfParties['seller'];
+            $pdfClient = (object) $pdfParties['buyer'];
+            $companyName = $pdfParties['seller_name'];
 
             $statusLabel = match ($invoice->status) {
                 'non_payee' => 'Non payée',
@@ -220,48 +224,48 @@
             <table class="header-table">
                 <tr>
                     <td class="company-block">
-                        @if(!empty($company?->logo))
-                            <img src="{{ public_path('storage/' . $company->logo) }}" alt="Logo" class="logo">
+                        @if($pdfParties['logo_path'] !== null)
+                            <img src="{{ $pdfParties['logo_path'] }}" alt="Logo" class="logo">
                         @endif
 
                         <div style="font-size: 16px; font-weight: bold; margin-bottom: 6px;">
                             {{ $companyName }}
                         </div>
 
-                        @if(!empty($company?->legal_status))
-                            <div>{{ $company->legal_status }}</div>
+                        @if(!empty($pdfCompany?->legal_status))
+                            <div>{{ $pdfCompany->legal_status }}</div>
                         @endif
 
-                        @if(!empty($company?->address))
-                            <div>{{ $company->address }}</div>
+                        @if(!empty($pdfCompany?->address))
+                            <div>{{ $pdfCompany->address }}</div>
                         @endif
 
-                        @if(!empty($company?->postal_code) || !empty($company?->city))
-                            <div>{{ $company->postal_code ?? '' }} {{ $company->city ?? '' }}</div>
+                        @if(!empty($pdfCompany?->postal_code) || !empty($pdfCompany?->city))
+                            <div>{{ $pdfCompany->postal_code ?? '' }} {{ $pdfCompany->city ?? '' }}</div>
                         @endif
 
-                        @if(!empty($company?->email))
-                            <div>{{ $company->email }}</div>
+                        @if(!empty($pdfCompany?->email))
+                            <div>{{ $pdfCompany->email }}</div>
                         @endif
 
-                        @if(!empty($company?->phone))
-                            <div>{{ $company->phone }}</div>
+                        @if(!empty($pdfCompany?->phone))
+                            <div>{{ $pdfCompany->phone }}</div>
                         @endif
 
-                        @if(!empty($company?->siret))
-                            <div>SIRET : {{ $company->siret }}</div>
+                        @if(!empty($pdfCompany?->siret))
+                            <div>SIRET : {{ $pdfCompany->siret }}</div>
                         @endif
 
-                        @if(!empty($company?->vat_number))
-                            <div>TVA intracommunautaire : {{ $company->vat_number }}</div>
+                        @if(!empty($pdfCompany?->vat_number))
+                            <div>TVA intracommunautaire : {{ $pdfCompany->vat_number }}</div>
                         @endif
 
-                        @if(!empty($company?->iban))
-                            <div>IBAN : {{ $company->iban }}</div>
+                        @if(!empty($pdfCompany?->iban))
+                            <div>IBAN : {{ $pdfCompany->iban }}</div>
                         @endif
 
-                        @if(!empty($company?->bic))
-                            <div>BIC : {{ $company->bic }}</div>
+                        @if(!empty($pdfCompany?->bic))
+                            <div>BIC : {{ $pdfCompany->bic }}</div>
                         @endif
                     </td>
 
@@ -295,27 +299,27 @@
                         <div class="box-title">Facturé à</div>
                         <div class="box">
                             <div style="font-weight: bold; margin-bottom: 4px;">
-                                {{ $invoice->client->full_name }}
+                                {{ $pdfClient->full_name }}
                             </div>
 
-                            @if(!empty($invoice->client->company_name))
-                                <div>{{ $invoice->client->company_name }}</div>
+                            @if(!empty($pdfClient->company_name))
+                                <div>{{ $pdfClient->company_name }}</div>
                             @endif
 
-                            @if(!empty($invoice->client->address))
-                                <div>{{ $invoice->client->address }}</div>
+                            @if(!empty($pdfClient->address))
+                                <div>{{ $pdfClient->address }}</div>
                             @endif
 
-                            @if(!empty($invoice->client->postal_code) || !empty($invoice->client->city))
-                                <div>{{ $invoice->client->postal_code ?? '' }} {{ $invoice->client->city ?? '' }}</div>
+                            @if(!empty($pdfClient->postal_code) || !empty($pdfClient->city))
+                                <div>{{ $pdfClient->postal_code ?? '' }} {{ $pdfClient->city ?? '' }}</div>
                             @endif
 
-                            @if(!empty($invoice->client->email))
-                                <div>{{ $invoice->client->email }}</div>
+                            @if(!empty($pdfClient->email))
+                                <div>{{ $pdfClient->email }}</div>
                             @endif
 
-                            @if(!empty($invoice->client->phone))
-                                <div>{{ $invoice->client->phone }}</div>
+                            @if(!empty($pdfClient->phone))
+                                <div>{{ $pdfClient->phone }}</div>
                             @endif
                         </div>
                     </td>
@@ -474,27 +478,35 @@
 
         {{-- Mentions légales --}}
         <div class="notes">
-            <strong>Conditions de paiement :</strong><br>
-            {{ $company->payment_terms ?? 'Paiement à réception de facture.' }}<br><br>
+            @if(!$fromSnapshot || !empty($pdfCompany->payment_terms))
+                <strong>Conditions de paiement :</strong><br>
+                {{ $fromSnapshot ? $pdfCompany->payment_terms : ($pdfCompany->payment_terms ?? 'Paiement à réception de facture.') }}<br><br>
+            @endif
 
             <strong>Date limite de règlement :</strong><br>
             {{ $invoice->due_date ? $invoice->due_date->format('d/m/Y') : 'À réception de facture' }}<br><br>
 
-            <strong>Escompte pour paiement anticipé :</strong><br>
-            Néant.<br><br>
+            @if(!$fromSnapshot || !empty($pdfCompany->invoice_early_payment_discount_text))
+                <strong>Escompte pour paiement anticipé :</strong><br>
+                {{ $fromSnapshot ? $pdfCompany->invoice_early_payment_discount_text : 'Néant.' }}<br><br>
+            @endif
 
-            <strong>Pénalités de retard :</strong><br>
-            10% du montant TTC.<br><br>
+            @if(!$fromSnapshot || !empty($pdfCompany->invoice_late_payment_penalties_text))
+                <strong>Pénalités de retard :</strong><br>
+                {{ $fromSnapshot ? $pdfCompany->invoice_late_payment_penalties_text : '10% du montant TTC.' }}<br><br>
+            @endif
 
-            <strong>Indemnité forfaitaire pour frais de recouvrement :</strong><br>
-            40 € dus en cas de retard de paiement.
+            @if(!$fromSnapshot || !empty($pdfCompany->invoice_recovery_indemnity_text))
+                <strong>Indemnité forfaitaire pour frais de recouvrement :</strong><br>
+                {{ $fromSnapshot ? $pdfCompany->invoice_recovery_indemnity_text : '40 € dus en cas de retard de paiement.' }}
+            @endif
         </div>
 
         {{-- Pied de page --}}
         <div class="footer">
             Merci pour votre confiance.
 
-            @if(!empty($company?->company_name) || !empty($company?->name))
+            @if($fromSnapshot ? $companyName !== '' : (!empty($pdfCompany?->company_name) || !empty($pdfCompany?->name)))
                 <div style="margin-top: 6px;">
                     Document émis par {{ $companyName }}.
                 </div>

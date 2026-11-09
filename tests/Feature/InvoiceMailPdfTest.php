@@ -33,6 +33,7 @@ beforeEach(function () {
         'tva_rate' => '20', 'unit_code' => 'HUR', 'tax_treatment' => 'taxable',
     ];
     $this->payload = [
+        'french_business_process_type' => 'S1',
         'action' => 'draft', 'client_id' => $this->client->id,
         'date' => '2026-11-05', 'due_date' => '2026-12-05', 'items' => [$this->line],
     ];
@@ -70,9 +71,9 @@ it('sends matching downloaded and attached PDF business content synchronously', 
     $attachment = $message->getAttachments()[0];
     expect($message->getAttachments())->toHaveCount(1)
         ->and($message->getTo()[0]->getAddress())->toBe('marie@example.test')
-        ->and($message->getSubject())->toBe('Votre facture ' . $this->invoice->fresh()->invoice_number)
-        ->and($attachment->getFilename())->toBe('facture-' . $this->invoice->fresh()->invoice_number . '.pdf')
-        ->and($attachment->getMediaType() . '/' . $attachment->getMediaSubtype())->toBe('application/pdf')
+        ->and($message->getSubject())->toBe('Votre facture '.$this->invoice->fresh()->invoice_number)
+        ->and($attachment->getFilename())->toBe('facture-'.$this->invoice->fresh()->invoice_number.'.pdf')
+        ->and($attachment->getMediaType().'/'.$attachment->getMediaSubtype())->toBe('application/pdf')
         ->and($attachment->getBody())->toStartWith('%PDF-');
     $text = invoiceMailPdfText($attachment->getBody());
     expect($text)->toBe(invoiceMailPdfText($download->getContent()));
@@ -96,7 +97,7 @@ it('uses exact prepared balances in the email body including issued credits', fu
     }
     foreach ($credits as $index => [$amount, $status]) {
         $this->invoice->creditNotes()->create([
-            'user_id' => $this->user->id, 'credit_note_number' => 'AV-' . $index, 'date' => '2026-11-05',
+            'user_id' => $this->user->id, 'credit_note_number' => 'AV-'.$index, 'date' => '2026-11-05',
             'status' => $status, 'reason' => 'Annulation', 'subtotal_ht' => $amount, 'total_tva' => '0.00', 'total_ttc' => $amount,
         ]);
     }
@@ -107,7 +108,7 @@ it('uses exact prepared balances in the email body including issued credits', fu
     if ($settled) {
         expect($html)->toContain('Cette facture est entièrement réglée.')->not->toContain('Le montant restant dû');
     } else {
-        expect($html)->toContain('Le montant restant dû', $remaining . ' €')->not->toContain('Cette facture est entièrement réglée.');
+        expect($html)->toContain('Le montant restant dû', $remaining.' €')->not->toContain('Cette facture est entièrement réglée.');
     }
     expect(invoiceMailPdfText($message->getAttachments()[0]->getBody()))->toContain($remaining);
 })->with([
@@ -192,7 +193,9 @@ it('does not modify invoice lines payments or credits when generating and sendin
         ->mapWithKeys(fn ($table) => [$table => DB::table($table)->orderBy('id')->get()->toJson()])->all();
     $before = $snapshot();
     $queries = [];
-    DB::listen(function ($query) use (&$queries) { $queries[] = $query->sql; });
+    DB::listen(function ($query) use (&$queries) {
+        $queries[] = $query->sql;
+    });
     $this->get(route('invoices.pdf', $this->invoice))->assertOk();
     $this->post(route('invoices.sendEmail', $this->invoice))->assertSessionHas('success');
     foreach ($queries as $query) {

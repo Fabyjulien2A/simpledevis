@@ -193,15 +193,42 @@
                                     id="tva_number"
                                     type="text"
                                     name="tva_number"
-                                    value="{{ old('tva_number', $company->tva_number ?? '') }}"
+                                    aria-describedby="tva_number_help"
+                                    value="{{ old('tva_number', $company->tva_number ?? $company->vat_number ?? '') }}"
                                     placeholder="TVA intracom"
                                     class="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                                 >
+                                <p id="tva_number_help" class="mt-2 text-sm text-gray-500">
+                                    Laissez vide si vous n’avez pas de numéro de TVA, notamment en franchise en base.
+                                    Format français : FR, deux lettres ou chiffres, puis neuf chiffres. Seul le format est contrôlé, pas l’existence fiscale du numéro.
+                                </p>
                                 @error('tva_number')
                                     <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
                             </div>
                         </div>
+                    </div>
+
+                    <div class="mt-8">
+                        <label for="vat_regime" class="mb-2 block text-sm font-semibold text-gray-700">Régime de TVA déclaré</label>
+                        <select id="vat_regime" name="vat_regime" aria-describedby="vat_regime_help"
+                                class="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+                            <option value="" @selected(old('vat_regime', $company->vat_regime ?? '') === '')>Non renseigné</option>
+                            <option value="subject_to_vat" @selected(old('vat_regime', $company->vat_regime ?? '') === 'subject_to_vat')>Entreprise redevable de la TVA</option>
+                            <option value="franchise" @selected(old('vat_regime', $company->vat_regime ?? '') === 'franchise')>Franchise en base de TVA (déclarée par l’entreprise)</option>
+                        </select>
+                        <p id="vat_regime_help" class="mt-2 text-sm text-gray-500">
+                            Déclarez votre régime selon votre situation fiscale. Il n’est pas déduit de votre numéro de TVA.
+                            Vous pouvez laisser ce choix non renseigné. Ce choix ne modifie pas les factures déjà établies.
+                        </p>
+                        @error('vat_regime')
+                            <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                        @if($company?->vat_regime === 'franchise' && (filled($company?->vat_number) || filled($company?->tva_number)))
+                            <p role="note" class="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                                Vous déclarez la franchise en base et un numéro de TVA est renseigné. Vérifiez la cohérence avec votre situation fiscale. Le numéro a été conservé.
+                            </p>
+                        @endif
                     </div>
 
                     {{-- Paiement --}}
@@ -260,6 +287,38 @@
                                     <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
                             </div>
+                        </div>
+                    </div>
+
+                    {{-- Mentions françaises explicites --}}
+                    <div class="mt-10 border-t border-gray-100 pt-8">
+                        <h4 class="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                            Mentions pour la facturation électronique
+                        </h4>
+                        <p class="mb-4 text-sm text-gray-500">
+                            Renseignez les textes adaptés à votre entreprise. Ces champs sont facultatifs à cette étape,
+                            tant que l’émission électronique n’est pas activée. Aucun texte n’est proposé automatiquement.
+                            Une mention renseignée ne garantit pas qu’elle soit juridiquement appropriée à votre situation ;
+                            faites vérifier son contenu par votre conseil si nécessaire.
+                            Leur enregistrement prépare une utilisation ultérieure et ne modifie pas les PDF actuels.
+                        </p>
+                        <div class="grid grid-cols-1 gap-6">
+                            @foreach([
+                                'invoice_recovery_indemnity_text' => ['Indemnité forfaitaire pour frais de recouvrement (PMT)', 'Indiquez la mention relative à l’indemnité de recouvrement applicable à vos factures.'],
+                                'invoice_late_payment_penalties_text' => ['Pénalités de retard (PMD)', 'Précisez les conditions et le taux des pénalités applicables en cas de retard.'],
+                                'invoice_early_payment_discount_text' => ['Escompte pour paiement anticipé (AAB)', 'Précisez les conditions d’escompte pour paiement anticipé ou son absence, selon votre situation.'],
+                            ] as $field => [$label, $help])
+                                <div>
+                                    <label for="{{ $field }}" class="mb-2 block text-sm font-semibold text-gray-700">{{ $label }}</label>
+                                    <textarea id="{{ $field }}" name="{{ $field }}" rows="3" maxlength="2000"
+                                              aria-describedby="{{ $field }}_help"
+                                              class="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">{{ old($field, $company?->{$field} ?? '') }}</textarea>
+                                    <p id="{{ $field }}_help" class="mt-2 text-sm text-gray-500">{{ $help }} Facultatif, 2 000 caractères maximum.</p>
+                                    @error($field)
+                                        <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+                                    @enderror
+                                </div>
+                            @endforeach
                         </div>
                     </div>
 
