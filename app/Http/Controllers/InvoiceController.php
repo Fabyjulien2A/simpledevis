@@ -8,6 +8,8 @@ use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Payment;
 use App\Services\InvoiceLinePreparationService;
+use App\Services\SuperPdp\InvoiceEmissionContext;
+use App\Services\SuperPdp\InvoiceEmissionPreparation;
 use App\Services\InvoicePartySnapshotCapture;
 use App\Services\InvoicePdfRenderer;
 use App\Services\InvoiceXmlGenerator;
@@ -368,6 +370,7 @@ class InvoiceController extends Controller
     {
         $validated = $request->validate([
             'action' => ['required', 'in:draft,issue'],
+            'emission_profile' => ['nullable', 'string', Rule::in([InvoiceEmissionContext::PROFILE])],
             'french_business_process_type' => ['bail', 'required_if:action,issue', 'nullable', 'string', Rule::in(Invoice::FRENCH_BUSINESS_PROCESS_TYPES)],
             'client_id' => ['required', 'exists:clients,id'],
             'date' => ['required', 'date'],
@@ -400,6 +403,7 @@ class InvoiceController extends Controller
                 'status' => 'non_payee',
                 'document_status' => 'draft',
                 'french_business_process_type' => $validated['french_business_process_type'] ?? null,
+                'emission_profile' => $validated['emission_profile'] ?? null,
                 'calculation_version' => 'decimal-v1',
                 'subtotal_ht' => $prepared['totals']['total_ht'],
                 'total_tva' => $prepared['totals']['total_vat'],
@@ -423,6 +427,7 @@ class InvoiceController extends Controller
                     'invoice_number' => Invoice::generateInvoiceNumber((int) $invoice->user_id),
                     'document_status' => 'issued',
                 ]);
+                app(InvoiceEmissionPreparation::class)->assertCompleteForFinalization($invoice);
             }
         });
 
@@ -481,6 +486,7 @@ class InvoiceController extends Controller
                     'Un brouillon comportant un règlement ou un statut de paiement incohérent ne peut pas être modifié.');
 
                 $validated = $request->validate([
+                    'emission_profile' => ['nullable', 'string', Rule::in([InvoiceEmissionContext::PROFILE])],
                     'french_business_process_type' => ['bail', 'nullable', 'string', Rule::in(Invoice::FRENCH_BUSINESS_PROCESS_TYPES)],
                     'client_id' => ['required', 'exists:clients,id'],
                     'date' => ['required', 'date'],
@@ -492,6 +498,7 @@ class InvoiceController extends Controller
                 $prepared = $linePreparation->prepare($this->translateFiscalItems($request->input('items')));
 
                 $invoice->update([
+                    'emission_profile' => array_key_exists('emission_profile', $validated) ? $validated['emission_profile'] : $invoice->emission_profile,
                     'french_business_process_type' => array_key_exists('french_business_process_type', $validated) ? $validated['french_business_process_type'] : $invoice->french_business_process_type,
                     'client_id' => $client->id,
                     'date' => $validated['date'],
@@ -511,6 +518,7 @@ class InvoiceController extends Controller
 
             // Parcours historique : mêmes règles et mêmes calculs, sans migration de version.
             $validated = $request->validate([
+                'emission_profile' => ['nullable', 'string', Rule::in([InvoiceEmissionContext::PROFILE])],
                 'french_business_process_type' => ['bail', 'nullable', 'string', Rule::in(Invoice::FRENCH_BUSINESS_PROCESS_TYPES)],
                 'client_id' => ['required', 'exists:clients,id'],
                 'date' => ['required', 'date'],
@@ -541,6 +549,7 @@ class InvoiceController extends Controller
             $totalTtc = $subtotalHt + $totalTva;
 
             $invoice->update([
+                'emission_profile' => array_key_exists('emission_profile', $validated) ? $validated['emission_profile'] : $invoice->emission_profile,
                 'french_business_process_type' => array_key_exists('french_business_process_type', $validated) ? $validated['french_business_process_type'] : $invoice->french_business_process_type,
                 'client_id' => $client->id,
                 'date' => $validated['date'],
@@ -691,6 +700,8 @@ class InvoiceController extends Controller
                 'document_status' => 'issued',
                 'status' => 'non_payee',
             ]);
+
+            app(InvoiceEmissionPreparation::class)->assertCompleteForFinalization($lockedInvoice);
 
             return true;
         });

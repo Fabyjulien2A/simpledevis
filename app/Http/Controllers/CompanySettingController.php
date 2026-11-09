@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Rules\IsoCountryCode;
+use App\Services\SuperPdp\DeclaredBillingAddress;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -37,6 +39,8 @@ class CompanySettingController extends Controller
             'address' => ['nullable', 'string'],
             'postal_code' => ['nullable', 'string'],
             'city' => ['nullable', 'string'],
+            'country_code' => ['nullable', new IsoCountryCode],
+            ...DeclaredBillingAddress::rules(),
             'legal_status' => ['nullable', 'string'],
 
             // Informations légales
@@ -83,6 +87,12 @@ class CompanySettingController extends Controller
             $company = $user->company()->lockForUpdate()->first();
             if ($company !== null) {
                 abort_unless($company->user_id === $user->id, 403);
+            }
+            if (array_key_exists('billing_electronic_address', $data) || array_key_exists('siret', $data)) {
+                $data['billing_electronic_address'] = DeclaredBillingAddress::validate(
+                    array_key_exists('billing_electronic_address', $data) ? $data['billing_electronic_address'] : $company?->billing_electronic_address,
+                    array_key_exists('siret', $data) ? $data['siret'] : $company?->siret,
+                );
             }
             $previousLogo = $company?->logo;
 

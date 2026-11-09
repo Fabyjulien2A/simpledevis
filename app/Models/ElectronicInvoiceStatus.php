@@ -15,6 +15,8 @@ class ElectronicInvoiceStatus extends Model
     ];
 
     protected $casts = [
+        'electronic_invoice_id' => 'integer',
+        'provider_event_id' => 'integer',
         'payload' => 'array',
         'received_at' => 'datetime',
     ];

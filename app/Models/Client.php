@@ -21,6 +21,7 @@ class Client extends Model
      */
     protected $fillable = [
     'user_id',
+    'billing_electronic_address',
     'company_name',
     'client_type',
     'country_code',
@@ -35,6 +36,8 @@ class Client extends Model
     'city',
     'notes',
 ];
+
+    protected $casts = ['billing_electronic_address' => 'array'];
 
     /**
      * Un client appartient à un utilisateur.

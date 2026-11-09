@@ -13,7 +13,7 @@ it('requires snapshot evidence for a persisted preparation', function (array $da
     expect(fn () => InvoiceElectronicPartyData::resolve($data, true))->toThrow(InvoicePartySnapshotException::class);
 })->with([[[]], [['party_snapshot' => null]], [['party_snapshot' => 'null']]]);
 
-it('does not infer country name VAT aliases bank details mentions or electronic addresses', function () {
+it('reconstructs only the historical buyer name without current country VAT bank mentions or addresses', function () {
     $snapshot = InvoicePartySnapshot::capture(['company_name' => null, 'name' => 'Nom sans priorité', 'vat_number' => null], ['first_name' => 'Zoë', 'last_name' => 'Exemple']);
     $data = [
         'party_snapshot' => json_encode($snapshot, JSON_THROW_ON_ERROR),
@@ -22,7 +22,7 @@ it('does not infer country name VAT aliases bank details mentions or electronic 
     ];
     $result = InvoiceElectronicPartyData::resolve($data);
     expect($result['seller'])->toBe(['name' => null, 'vat_number' => null])
-        ->and($result['buyer'])->toBe([])
+        ->and($result['buyer'])->toBe(['full_name' => 'Zoë Exemple'])
         ->and($result['company_invoice_mentions'])->toBe([])
         ->and($result)->not->toHaveKey('company_vat_regime');
 });

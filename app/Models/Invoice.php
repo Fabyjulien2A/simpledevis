@@ -34,6 +34,7 @@ class Invoice extends Model
         'status',
         'document_status',
         'french_business_process_type',
+        'emission_profile',
         'calculation_version',
         'subtotal_ht',
         'total_tva',
@@ -56,6 +57,7 @@ class Invoice extends Model
      * @var array<string, string>
      */
     protected $casts = [
+        'emission_context' => 'array',
         'date' => 'date',
         'due_date' => 'date',
         'subtotal_ht' => 'decimal:2',
@@ -72,6 +74,17 @@ class Invoice extends Model
 
     protected static function booted(): void
     {
+        static::updating(function (Invoice $invoice) {
+            if (! $invoice->isDirty(['emission_context', 'emission_profile'])) {
+                return;
+            }
+            $stored = $invoice->newQuery()->whereKey($invoice->getKey())->first(['document_status', 'emission_context']);
+            if ($stored && ($stored->isIssued()
+                || ($invoice->isDirty('emission_context') && $stored->getRawOriginal('emission_context') !== null))) {
+                throw ValidationException::withMessages(['emission_profile' => 'Les données d’émission figées ne peuvent pas être modifiées ou ajoutées après finalisation.']);
+            }
+        });
+
         static::updating(function (Invoice $invoice) {
             if (! $invoice->isDirty('party_snapshot')) {
                 return;

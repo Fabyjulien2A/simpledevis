@@ -14,7 +14,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(\App\Services\SuperPdp\Emission\EmissionPrerequisites::class,
+            \App\Services\SuperPdp\Emission\ClosedEmissionPrerequisites::class);
+        $this->app->bind(\App\Services\SuperPdp\Emission\EmissionTransport::class,
+            \App\Services\SuperPdp\Emission\DisabledEmissionTransport::class);
     }
 
     /**

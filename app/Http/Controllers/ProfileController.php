@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Models\Company;
+use App\Models\SupplierInvoice;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -50,7 +52,7 @@ class ProfileController extends Controller
 
         $user = $request->user();
 
-        $deleted = DB::transaction(function () use ($user, $request) {
+        $deletionError = DB::transaction(function () use ($user, $request) {
             // Même verrou utilisateur que la création définitive et la finalisation.
             $lockedUser = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
             abort_unless($lockedUser->id === $request->user()->id, 403);
@@ -58,17 +60,26 @@ class ProfileController extends Controller
                 ->lockForUpdate()->get(['id', 'document_status']);
 
             if ($invoices->contains('document_status', 'issued')) {
-                return false;
+                return 'Votre compte ne peut pas être supprimé car il possède au moins une facture définitive.';
+            }
+
+            // Même ordre que la finalisation : utilisateur, factures clients, entreprises.
+            // Verrouiller les entreprises avant la recherche des factures reçues.
+            $companyIds = Company::where('user_id', $lockedUser->id)->orderBy('id')
+                ->lockForUpdate()->pluck('id');
+            if ($companyIds->isNotEmpty() && SupplierInvoice::whereIn('company_id', $companyIds)
+                ->orderBy('id')->lockForUpdate()->first(['id']) !== null) {
+                return 'Votre compte ne peut pas être supprimé car il possède au moins une facture fournisseur reçue.';
             }
 
             $lockedUser->delete();
 
-            return true;
+            return null;
         });
 
-        if (! $deleted) {
+        if ($deletionError !== null) {
             return Redirect::route('profile.edit')->withErrors([
-                'account' => 'Votre compte ne peut pas être supprimé car il possède au moins une facture définitive.',
+                'account' => $deletionError,
             ], 'userDeletion');
         }
 

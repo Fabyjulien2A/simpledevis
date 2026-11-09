@@ -41,6 +41,10 @@ class SuperPdpInvoicePayloadBuilder
             throw new InvalidArgumentException('La facture doit posséder une date d’émission avant sa préparation pour SUPER PDP.');
         }
 
+        if (! $invoice->exists && $sellerElectronicAddress === null) {
+            throw new InvalidArgumentException('L’adresse électronique de facturation du vendeur doit être fournie explicitement.');
+        }
+
         return $this->buildWithData(fn () => $this->dataBuilder->buildElectronic($invoice), $sellerElectronicAddress, $buyerElectronicAddress, $frenchContext, $invoice->exists);
     }
 
@@ -64,6 +68,22 @@ class SuperPdpInvoicePayloadBuilder
         ?array $frenchContext,
         bool $persisted = false
     ): array {
+        if ($sellerElectronicAddress !== null) {
+            // Garder le refus précoce des entrées explicites mal formées.
+            $this->requiredString($sellerElectronicAddress, 'scheme', 'Le schéma de l’adresse électronique du vendeur');
+            $this->requiredString($sellerElectronicAddress, 'value', 'La valeur de l’adresse électronique du vendeur');
+        }
+        $data = InvoiceElectronicPartyData::resolve($source(), $persisted);
+        $supplied = [];
+        if ($sellerElectronicAddress !== null) {
+            $supplied['seller_electronic_address'] = $sellerElectronicAddress;
+        }
+        if ($buyerElectronicAddress !== null) {
+            $supplied['buyer_electronic_address'] = $buyerElectronicAddress;
+        }
+        $qualified = InvoiceEmissionContext::resolve($data, $supplied);
+        $sellerElectronicAddress = $qualified['seller_electronic_address'] ?? null;
+        $buyerElectronicAddress = $qualified['buyer_electronic_address'] ?? null;
         if ($sellerElectronicAddress === null) {
             throw new InvalidArgumentException('L’adresse électronique de facturation du vendeur doit être fournie explicitement.');
         }
@@ -75,7 +95,6 @@ class SuperPdpInvoicePayloadBuilder
             'value' => $this->requiredString($sellerElectronicAddress, 'value', 'La valeur de l’adresse électronique du vendeur'),
         ];
 
-        $data = InvoiceElectronicPartyData::resolve($source(), $persisted);
         $context = $persisted || array_key_exists('french_business_process_type', $data)
             ? FrenchInvoiceContext::fromInvoiceData($data, $frenchContext)
             : FrenchInvoiceContext::fromArray($frenchContext);

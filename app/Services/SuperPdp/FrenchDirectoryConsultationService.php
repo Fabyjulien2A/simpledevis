@@ -72,6 +72,10 @@ final class FrenchDirectoryConsultationService
         if ((! $entries || property_exists($body, 'has_more')) && ! is_bool($body->has_more ?? null)) {
             throw new FrenchDirectoryConsultationException('malformed_response');
         }
+        if ($entries && array_diff(array_keys(get_object_vars($body)), ['data', 'has_more']) !== []) {
+            // Ne pas perdre silencieusement un nouveau marqueur de pagination du fournisseur.
+            throw new FrenchDirectoryConsultationException('malformed_response');
+        }
 
         $data = [];
         foreach ($body->data as $item) {

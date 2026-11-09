@@ -22,6 +22,8 @@ class Company extends Model
      */
     protected $fillable = [
         'user_id',
+        'billing_electronic_address',
+        'country_code',
         'company_name',
         'siret',
         'vat_number',
@@ -42,6 +44,8 @@ class Company extends Model
         'invoice_early_payment_discount_text',
         'quote_validity',
     ];
+
+    protected $casts = ['billing_electronic_address' => 'array'];
 
     /**
      * Une entreprise appartient à un utilisateur.

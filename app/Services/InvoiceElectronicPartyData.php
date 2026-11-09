@@ -23,10 +23,19 @@ final class InvoiceElectronicPartyData
                 $parties['seller'][$field] = $seller[$source];
             }
         }
-        // Ne pas exécuter Client::full_name ni composer les prénom/nom absents du contrat.
+        // Lecture historique uniquement : aucun accesseur des profils actuels.
         foreach (['client_type', 'full_name', 'company_name', 'siret', 'vat_number', 'country_code', 'address', 'postal_code', 'city', 'email', 'phone'] as $field) {
             if (array_key_exists($field, $snapshot['buyer'])) {
                 $parties['buyer'][$field] = $snapshot['buyer'][$field];
+            }
+        }
+        if (trim((string) ($parties['buyer']['full_name'] ?? '')) === '') {
+            $historicalName = trim(implode(' ', array_filter([
+                trim((string) ($snapshot['buyer']['first_name'] ?? '')),
+                trim((string) ($snapshot['buyer']['last_name'] ?? '')),
+            ], fn ($value) => $value !== '')));
+            if ($historicalName !== '') {
+                $parties['buyer']['full_name'] = $historicalName;
             }
         }
         $mentions = [];

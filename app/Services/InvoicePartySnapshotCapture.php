@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Client;
 use App\Models\Company;
 use App\Models\Invoice;
+use App\Services\SuperPdp\InvoiceEmissionContext;
 use LogicException;
 use Illuminate\Validation\ValidationException;
 
@@ -45,6 +46,9 @@ class InvoicePartySnapshotCapture
             if ($existing['schema_version'] === InvoicePartySnapshot::PRIVATE_LOGO_SCHEMA_VERSION) {
                 $this->logos->resolve((int) $stored->user_id, $existing['seller']['logo'] ?? null);
             }
+            if ($stored->emission_profile !== null && $stored->getRawOriginal('emission_context') === null) {
+                throw ValidationException::withMessages(['emission_profile' => 'Un instantané existant ne peut pas être enrichi rétroactivement pour l’émission.']);
+            }
             return;
         }
 
@@ -56,6 +60,9 @@ class InvoicePartySnapshotCapture
         // Attributs réellement stockés uniquement : aucun accesseur, nom User de repli,
         // pays FR implicite, rapprochement des alias TVA ou contexte de requête HTTP.
         $seller = array_intersect_key($company?->getRawOriginal() ?? [], array_flip(self::COMPANY_FIELDS));
+        if (($seller['country_code'] ?? null) === null) {
+            unset($seller['country_code']);
+        }
         if (array_key_exists('logo', $seller)) {
             $seller['logo'] = $this->logos->archive((int) $stored->user_id, $seller['logo']);
         }
@@ -68,6 +75,10 @@ class InvoicePartySnapshotCapture
         // Non fillable : l'instantané n'est jamais accepté depuis un formulaire.
         // jsonSerialize() conserve les parties vides sous forme d'objets JSON.
         $stored->party_snapshot = $snapshot->jsonSerialize();
+        $stored->emission_context = InvoiceEmissionContext::capture(
+            $stored->emission_profile, $company?->billing_electronic_address, $client->billing_electronic_address,
+            $snapshot->toArray(),
+        );
         $stored->save();
     }
 }

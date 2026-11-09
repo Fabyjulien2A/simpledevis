@@ -6,13 +6,14 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
- public function up(): void
-{
-    Schema::table('payments', function (Blueprint $table) {
-    $table->string('method')->nullable()->change();
-});
-}
+    public function up(): void
+    {
+        $exists = Schema::hasColumn('payments', 'method');
+        Schema::table('payments', function (Blueprint $table) use ($exists) {
+            $column = $table->string('method')->nullable();
+            if ($exists) {
+                $column->change();
+            }
+        });
+    }
 };

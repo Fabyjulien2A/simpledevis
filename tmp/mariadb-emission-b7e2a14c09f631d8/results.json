@@ -1,0 +1,180 @@
+{
+    "transactions": {
+        "status": "passed",
+        "separate_connections": 2,
+        "engine": "InnoDB"
+    },
+    "parallel_1": {
+        "status": "passed",
+        "workers": [
+            {
+                "status": "pending",
+                "attempt_id": 32,
+                "number": 1,
+                "error_code": null,
+                "connection_id": 2268118210
+            },
+            {
+                "status": "accepted",
+                "attempt_id": 32,
+                "number": 1,
+                "error_code": null,
+                "connection_id": 2268118211
+            }
+        ],
+        "mock_deposits": 1
+    },
+    "parallel_2": {
+        "status": "passed",
+        "workers": [
+            {
+                "status": "pending",
+                "attempt_id": 33,
+                "number": 1,
+                "error_code": null,
+                "connection_id": 2268118767
+            },
+            {
+                "status": "accepted",
+                "attempt_id": 33,
+                "number": 1,
+                "error_code": null,
+                "connection_id": 2268118769
+            }
+        ],
+        "mock_deposits": 1
+    },
+    "parallel_3": {
+        "status": "passed",
+        "workers": [
+            {
+                "status": "pending",
+                "attempt_id": 34,
+                "number": 1,
+                "error_code": null,
+                "connection_id": 2268119390
+            },
+            {
+                "status": "accepted",
+                "attempt_id": 34,
+                "number": 1,
+                "error_code": null,
+                "connection_id": 2268119391
+            }
+        ],
+        "mock_deposits": 1
+    },
+    "timeout": {
+        "status": "passed",
+        "mock_deposits": 1,
+        "reconciled": "accepted"
+    },
+    "negative_reconciliation": {
+        "status": "passed",
+        "mock_deposits": 1,
+        "final_status": "unknown"
+    },
+    "unique_constraints_and_events": {
+        "status": "passed",
+        "constraints": [
+            "dispatch_key",
+            "local_reference",
+            "attempt_number",
+            "attempt_reference",
+            "provider_binding_key",
+            "event_key"
+        ],
+        "payment_unchanged": true
+    },
+    "lock_wait": {
+        "status": "passed",
+        "driver_code": 1205,
+        "mock_deposits": 1
+    },
+    "interrupt-before": {
+        "status": "passed",
+        "real_child_terminated": true,
+        "mock_deposits": 0,
+        "final_status": "unknown"
+    },
+    "interrupt-after": {
+        "status": "passed",
+        "real_child_terminated": true,
+        "mock_deposits": 1,
+        "final_status": "accepted"
+    },
+    "deadlock-reserve": {
+        "status": "passed",
+        "application_worker": {
+            "status": "worker_error",
+            "error": {
+                "class": "Illuminate\\Database\\QueryException",
+                "sqlstate": "40001",
+                "driver_code": 1213,
+                "sql_template": "select * from `mariadb_emission_test_locks` where `id` = ? limit 1 for update",
+                "validation": null,
+                "check": null
+            }
+        },
+        "opponent": {
+            "status": "opponent_committed"
+        },
+        "observed_deadlock": {
+            "class": "Illuminate\\Database\\QueryException",
+            "sqlstate": "40001",
+            "driver_code": 1213,
+            "sql_template": "select * from `mariadb_emission_test_locks` where `id` = ? limit 1 for update",
+            "validation": null,
+            "check": null
+        },
+        "final_mock_deposits": 1
+    },
+    "deadlock-finalize": {
+        "status": "passed",
+        "application_worker": {
+            "status": "unknown",
+            "attempt_id": 44,
+            "number": 1,
+            "error_code": "result_persistence_uncertain",
+            "connection_id": 2268125906
+        },
+        "opponent": {
+            "status": "opponent_committed"
+        },
+        "observed_deadlock": {
+            "class": "Illuminate\\Database\\QueryException",
+            "sqlstate": "40001",
+            "driver_code": 1213,
+            "sql_template": "select * from `mariadb_emission_test_locks` where `id` = ? limit 1 for update",
+            "validation": null,
+            "check": null
+        },
+        "final_mock_deposits": 1
+    },
+    "deadlock-claim": {
+        "status": "passed",
+        "application_worker": {
+            "status": "worker_error",
+            "error": {
+                "class": "Illuminate\\Database\\QueryException",
+                "sqlstate": "40001",
+                "driver_code": 1213,
+                "sql_template": "select * from `mariadb_emission_test_locks` where `id` = ? limit 1 for update",
+                "validation": null,
+                "check": null
+            }
+        },
+        "opponent": {
+            "status": "opponent_committed"
+        },
+        "observed_deadlock": {
+            "class": "Illuminate\\Database\\QueryException",
+            "sqlstate": "40001",
+            "driver_code": 1213,
+            "sql_template": "select * from `mariadb_emission_test_locks` where `id` = ? limit 1 for update",
+            "validation": null,
+            "check": null
+        },
+        "final_mock_deposits": 1
+    }
+}

@@ -1,0 +1,10 @@
+{
+    "status": "worker_error",
+    "error": {
+        "class": "PDOException",
+        "sqlstate": "0",
+        "driver_code": null,
+        "sql_template": null,
+        "check": null
+    }
+}

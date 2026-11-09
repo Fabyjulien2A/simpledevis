@@ -17,6 +17,11 @@ class ElectronicInvoice extends Model
     ];
 
     protected $casts = [
+        'invoice_id' => 'integer',
+        'provider_company_id' => 'integer',
+        'provider_invoice_id' => 'integer',
+        'business_event_id' => 'integer',
+        'event_cursor' => 'integer',
         'request_payload' => 'array',
         'response_payload' => 'array',
         'sent_at' => 'datetime',
@@ -25,5 +30,10 @@ class ElectronicInvoice extends Model
     public function statuses()
     {
         return $this->hasMany(ElectronicInvoiceStatus::class);
+    }
+
+    public function attempts()
+    {
+        return $this->hasMany(ElectronicInvoiceAttempt::class);
     }
 }

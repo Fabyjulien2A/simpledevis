@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
+use App\Services\SuperPdp\DeclaredBillingAddress;
 use App\Models\Invoice;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -95,6 +96,7 @@ class ClientController extends Controller
             'city' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
 
+            ...DeclaredBillingAddress::rules(),
             'client_type' => ['required', 'in:individual,professional'],
             'country_code' => ['required', 'string', 'size:2'],
             'siret' => ['nullable', 'string'],
@@ -104,6 +106,9 @@ class ClientController extends Controller
         // On associe automatiquement le client à l'utilisateur connecté
         $validated['user_id'] = auth()->id();
 
+        if (array_key_exists('billing_electronic_address', $validated)) {
+            $validated['billing_electronic_address'] = DeclaredBillingAddress::validate($validated['billing_electronic_address'], $validated['siret'] ?? null);
+        }
         Client::create($validated);
 
         return redirect()
@@ -150,13 +155,24 @@ class ClientController extends Controller
             'city' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
 
+            ...DeclaredBillingAddress::rules(),
             'client_type' => ['required', 'in:individual,professional'],
             'country_code' => ['required', 'string', 'size:2'],
             'siret' => ['nullable', 'string', 'max:20'],
             'vat_number' => ['nullable', 'string', 'max:30'],
         ]);
 
-        $client->update($validated);
+        DB::transaction(function () use ($client, $validated) {
+            $locked = Client::whereKey($client->id)->lockForUpdate()->firstOrFail();
+            $this->authorizeClient($locked);
+            if (array_key_exists('billing_electronic_address', $validated) || array_key_exists('siret', $validated)) {
+                $validated['billing_electronic_address'] = DeclaredBillingAddress::validate(
+                    array_key_exists('billing_electronic_address', $validated) ? $validated['billing_electronic_address'] : $locked->billing_electronic_address,
+                    array_key_exists('siret', $validated) ? $validated['siret'] : $locked->siret,
+                );
+            }
+            $locked->update($validated);
+        });
 
         return redirect()
             ->route('clients.index')

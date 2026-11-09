@@ -12,6 +12,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class QuoteController extends Controller
 {
@@ -21,6 +22,7 @@ class QuoteController extends Controller
     public function index(Request $request): View
     {
         $query = Quote::where('user_id', auth()->id())
+            ->whereHas('client', fn ($query) => $query->where('user_id', auth()->id()))
             ->with('client', 'invoice');
 
         // Recherche
@@ -78,7 +80,7 @@ class QuoteController extends Controller
         }
 
         $validated = $request->validate([
-            'client_id' => ['required', 'exists:clients,id'],
+            'client_id' => ['required', Rule::exists('clients', 'id')->where('user_id', $user->id)],
             'tva_rate' => ['required', 'numeric', 'in:0,10,20'],
             'items' => ['required', 'array'],
             'items.*.description' => ['nullable', 'string', 'max:255'],
@@ -139,9 +141,7 @@ class QuoteController extends Controller
      */
     public function show(Quote $quote): View
     {
-        if ($quote->user_id !== auth()->id()) {
-            abort(403);
-        }
+        $quote = $this->authorizedQuote($quote);
 
         $quote->load('client', 'items', 'invoice');
 
@@ -153,9 +153,7 @@ class QuoteController extends Controller
      */
     public function edit(Quote $quote): View
     {
-        if ($quote->user_id !== auth()->id()) {
-            abort(403);
-        }
+        $quote = $this->authorizedQuote($quote);
 
         return view('quotes.edit', compact('quote'));
     }
@@ -165,9 +163,7 @@ class QuoteController extends Controller
      */
     public function update(Request $request, Quote $quote): RedirectResponse
     {
-        if ($quote->user_id !== auth()->id()) {
-            abort(403);
-        }
+        $quote = $this->authorizedQuote($quote);
 
         $validated = $request->validate([
             'status' => ['required', 'in:brouillon,envoye,accepte,refuse'],
@@ -187,9 +183,7 @@ class QuoteController extends Controller
      */
     public function pdf(Quote $quote)
     {
-        if ($quote->user_id !== auth()->id()) {
-            abort(403);
-        }
+        $quote = $this->authorizedQuote($quote);
 
         $quote->load('client', 'items');
 
@@ -205,9 +199,7 @@ class QuoteController extends Controller
      */
     public function duplicate(Quote $quote): RedirectResponse
     {
-        if ($quote->user_id !== auth()->id()) {
-            abort(403);
-        }
+        $quote = $this->authorizedQuote($quote);
 
         $quote->load('items');
 
@@ -245,9 +237,7 @@ class QuoteController extends Controller
     
 public function convertToInvoice(Quote $quote): RedirectResponse
 {
-    if ($quote->user_id !== auth()->id()) {
-        abort(403);
-    }
+    $quote = $this->authorizedQuote($quote);
 
     $user = auth()->user();
 
@@ -273,6 +263,7 @@ public function convertToInvoice(Quote $quote): RedirectResponse
             ->firstOrFail();
 
         // Vérifie à nouveau après verrouillage.
+        $lockedQuote = $this->authorizedQuote($lockedQuote);
         if ($lockedQuote->invoice()->exists()) {
             return null;
         }
@@ -328,5 +319,17 @@ public function convertToInvoice(Quote $quote): RedirectResponse
         );
 }
 
-   
+    /** Vérifie le devis persisté et son client avant toute lecture des relations. */
+    private function authorizedQuote(Quote $quote): Quote
+    {
+        abort_unless($quote->user_id === auth()->id(), 403);
+
+        // Ne pas se fier à un modèle de route ou une relation déjà chargée.
+        $stored = Quote::whereKey($quote->id)->firstOrFail();
+        abort_unless($stored->user_id === auth()->id(), 403);
+        abort_unless($stored->client()->where('user_id', auth()->id())->exists(), 403);
+
+        return $stored;
+    }
+
 }

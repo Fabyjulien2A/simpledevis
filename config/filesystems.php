@@ -30,6 +30,15 @@ return [
 
     'disks' => [
 
+        'invoice_cii' => [
+            'driver' => 'local',
+            'root' => storage_path('app/invoice-cii'),
+            'visibility' => 'private',
+            'serve' => false,
+            'throw' => true,
+            'report' => false,
+        ],
+
         'invoice_logos' => [
             'driver' => 'local',
             'root' => storage_path('app/invoice-logos'),

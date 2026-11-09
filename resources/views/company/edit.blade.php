@@ -161,6 +161,15 @@
                         </div>
                     </div>
 
+                    <div class="mt-6">
+                        <label for="country_code" class="block text-sm font-semibold text-gray-700">Pays du vendeur — code ISO</label>
+                        <input id="country_code" name="country_code" type="text" maxlength="2" placeholder="FR"
+                               value="{{ old('country_code', $company->country_code ?? '') }}" class="w-full rounded-lg border-gray-300">
+                        <p class="mt-1 text-sm text-gray-600">Deux lettres majuscules ISO 3166-1 (ex. FR). Aucun pays n’est attribué automatiquement.</p>
+                        @error('country_code') <p class="text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <x-billing-electronic-address bt="BT-34 (vendeur)" :address="$company?->billing_electronic_address" />
+
                     {{-- Informations légales --}}
                     <div class="mt-10 border-t border-gray-100 pt-8">
                         <h4 class="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-500">

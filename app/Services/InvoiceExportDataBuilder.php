@@ -66,6 +66,8 @@ class InvoiceExportDataBuilder
         }
 
         return array_merge($parties, [
+            'emission_profile' => $stored->emission_profile,
+            'emission_context' => $stored->getRawOriginal('emission_context'),
             'french_business_process_type' => $stored->french_business_process_type,
             'invoice_number' => $stored->invoice_number,
             'date' => $stored->date?->format('Y-m-d'),

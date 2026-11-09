@@ -373,6 +373,8 @@
 
 </div>
 
+<x-billing-electronic-address bt="BT-49 (acheteur)" :address="$client->billing_electronic_address ?? null" />
+
 <div class="mt-6 flex items-center gap-3">
 
     <button

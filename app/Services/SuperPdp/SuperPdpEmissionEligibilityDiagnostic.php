@@ -77,6 +77,14 @@ class SuperPdpEmissionEligibilityDiagnostic
             // Historique : conserver les contrôles et la lecture existants, sans autoriser un payload.
         }
 
+        try {
+            $context = InvoiceEmissionContext::resolve($data, $context);
+        } catch (InvalidArgumentException $exception) {
+            $this->add($blockers, 'invoice.emission_context.invalid', 'invalid_data', 'emission_context', $exception->getMessage());
+
+            return $this->result($blockers);
+        }
+
         foreach (['document_kind' => 'ordinary', 'type_code' => 380, 'currency_code' => 'EUR'] as $field => $expected) {
             if ($this->missing($context[$field] ?? null)) {
                 $this->add($blockers, 'context.'.$field.'.missing', 'missing_data', $field, 'Renseignez explicitement la qualification '.$field.' ; elle n’est pas conservée dans la facture actuelle.');

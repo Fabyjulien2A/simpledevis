@@ -53,6 +53,16 @@
         </div>
     @endif
 
+    <div>
+        <label for="emission_profile" class="block text-sm font-medium text-gray-700 mb-2">Préparation de la facturation électronique</label>
+        <select id="emission_profile" name="emission_profile" class="w-full rounded-lg border-gray-300">
+            <option value="">Sans qualification électronique</option>
+            <option value="fr_b2b_380_eur" @selected(old('emission_profile', $invoice->emission_profile ?? '') === 'fr_b2b_380_eur')>Facture ordinaire B2B France — type 380 — EUR</option>
+        </select>
+        <p class="mt-1 text-sm text-gray-600">Ce choix exige des parties françaises, un client professionnel, les identités et adresses complètes, SIRET, régime de TVA, mentions françaises, échéance ou conditions de paiement et adresses de facturation BT-34/BT-49 à la finalisation. Aucun paiement ni avoir définitif. Aucun envoi n’est activé ; le routage reste à vérifier.</p>
+        @error('emission_profile') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+    </div>
+
     {{-- Client --}}
     <div>
         <label class="block text-sm font-medium text-gray-700 mb-2">

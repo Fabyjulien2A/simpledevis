@@ -1,0 +1,11 @@
+{
+    "status": "worker_error",
+    "error": {
+        "class": "Illuminate\\Database\\QueryException",
+        "sqlstate": "40001",
+        "driver_code": 1213,
+        "sql_template": "select * from `mariadb_emission_test_locks` where `id` = ? limit 1 for update",
+        "validation": null,
+        "check": null
+    }
+}

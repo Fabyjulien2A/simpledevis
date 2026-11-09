@@ -1,0 +1,12 @@
+{
+    "run": "b7e2a14c09f631d8",
+    "owner_id": 2,
+    "buyer_id": 2,
+    "legacy_owner_id": 1,
+    "migration_order": [
+        "2026_11_09_000001_add_invoice_emission_preparation_fields",
+        "2026_11_09_000002_add_outgoing_emission_orchestration"
+    ],
+    "historical_rows": 35,
+    "migration_rollback_reapply": "passed"
+}
