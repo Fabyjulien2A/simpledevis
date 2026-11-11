@@ -14,6 +14,9 @@ class SuperPdpConnection extends Model
 
     protected $fillable = [
         'company_id',
+        'environment',
+        'oauth_client_id',
+        'api_url',
         'superpdp_company_id',
         'access_token',
         'refresh_token',
@@ -57,19 +60,28 @@ class SuperPdpConnection extends Model
         return $this->belongsTo(Company::class);
     }
 
-    public function tokenIsExpired(): bool
-{
-    if (!$this->access_token_expires_at) {
-        return true;
+    public function assertOAuthContext(string $environment, string $clientId, string $apiUrl): void
+    {
+        if (! in_array($environment, ['sandbox', 'production'], true)
+            || $this->environment !== $environment || $clientId === '' || $this->oauth_client_id !== $clientId
+            || $apiUrl === '' || $this->api_url !== $apiUrl) {
+            throw new \RuntimeException('Connexion OAuth non qualifiée pour cet environnement/client. Reconnectez votre entreprise.');
+        }
     }
 
-    return $this->access_token_expires_at
-        ->lte(now()->addMinutes(5));
-}
+    public function tokenIsExpired(): bool
+    {
+        if (! $this->access_token_expires_at) {
+            return true;
+        }
+
+        return $this->access_token_expires_at
+            ->lte(now()->addMinutes(5));
+    }
 
     public function isConnected(): bool
     {
         return $this->status === 'connected'
-            && !empty($this->refresh_token);
+            && ! empty($this->refresh_token);
     }
 }

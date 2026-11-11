@@ -8,7 +8,7 @@ use App\Services\InvoiceExportDataBuilder;
 use InvalidArgumentException;
 use Throwable;
 
-/** Préparation hors ligne uniquement : aucun routage global débloqué, aucune écriture SQL. */
+/** Préparation CII simulée ou via API séparée : aucun dépôt, aucune écriture SQL métier. */
 final class InvoiceCiiPreparation
 {
     public function __construct(
@@ -76,6 +76,58 @@ final class InvoiceCiiPreparation
         } catch (Throwable) {
             // Aucun corps de réponse, token, XML ou information d'un autre compte dans les erreurs.
             return $result + ['reason' => $phase.'_failed', 'message' => 'La préparation a été refusée. Aucun envoi ni statut d’émission n’a été enregistré.'];
+        }
+    }
+
+    /** API preparation only: independent from and never opens the emission transport. */
+    public function produce(User $actor, Invoice $invoice, string $verificationReference, ?SandboxCiiPreparationGateway $gateway = null): array
+    {
+        $stored = $this->owned($actor, $invoice);
+        $result = ['status' => 'blocked', 'ready_for_emission' => false, 'deposit_performed' => false,
+            'requires_api' => true, 'local_checks_passed' => false, 'artifact' => null];
+        $diagnostic = $this->diagnostic->diagnose($stored);
+        if (! $diagnostic['local_checks_passed']) {
+            return $result + ['reason' => 'local_data_incomplete', 'blockers' => $diagnostic['blockers']];
+        }
+        $result['local_checks_passed'] = true;
+        $phase = 'preparation_context';
+        try {
+            $data = $this->source->buildElectronic($stored);
+            $fingerprint = $this->fingerprint($data);
+            $payload = $this->builder->buildFromData($data);
+            $gateway ??= SandboxCiiPreparationGateway::forInvoice($actor, $stored, $fingerprint, $verificationReference);
+            $gateway->assertScope($actor, $stored, $fingerprint, $verificationReference);
+            $gateway->context();
+            $phase = 'conversion';
+            $conversion = $gateway->convert($payload);
+            $this->checks->assertMatches($conversion->data['xml'], $payload);
+            $phase = 'validation';
+            $validation = null;
+            $validationError = false;
+            try {
+                $validation = $gateway->validate($conversion->data['xml']);
+            } catch (Throwable) {
+                // A known converted document survives an unavailable/uncertain validation
+                // in a non-authorized archive. Never retry and never substitute a local pass.
+                $validationError = true;
+            }
+            $fresh = $this->owned($actor, $stored);
+            if (! hash_equals($fingerprint, $this->fingerprint($this->source->buildElectronic($fresh)))) {
+                return $result + ['reason' => 'invoice_changed_during_preparation'];
+            }
+            $phase = 'private_storage';
+            $artifact = $this->archive->storeProduced($actor, $fresh, $conversion, $validation, $verificationReference);
+            $result['artifact'] = $artifact;
+            $result['ready_for_emission'] = $artifact['ready_for_emission'];
+            $result['status'] = match ($artifact['mode']) {
+                'validated_private_document' => 'prepared_validated',
+                'pending_validation' => 'prepared_pending_validation',
+                default => 'prepared_simulation',
+            };
+
+            return $result + ['reason' => $validationError ? 'validation_unavailable' : $artifact['validation_status']];
+        } catch (Throwable) {
+            return $result + ['reason' => $phase.'_failed', 'message' => 'CII preparation refused. No deposit or invoice mutation.'];
         }
     }
 

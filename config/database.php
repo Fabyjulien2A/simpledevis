@@ -3,6 +3,33 @@
 use Illuminate\Support\Str;
 use Pdo\Mysql;
 
+// The explicit sandbox profile exposes exactly one connection and no production fallback.
+if (env('APP_ENV') === 'sandbox') {
+    if (env('DB_CONNECTION') !== 'superpdp_sandbox'
+        || env('DB_DATABASE') !== 'fabyjulien_simpledevis_test'
+        || env('DB_USERNAME') !== 'fabyjulien_simpledevis_test'
+        || ! in_array(env('DB_URL'), [null, ''], true) || ! in_array(env('DB_SOCKET'), [null, ''], true)
+        || ! is_string(env('DB_HOST')) || ! preg_match('/\A[A-Za-z0-9.-]+\z/D', env('DB_HOST'))
+        || filter_var(env('DB_PORT', '3306'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]]) === false
+        || ! is_string(env('DB_PASSWORD')) || env('DB_PASSWORD') === '') {
+        throw new RuntimeException('Invalid sandbox database profile. No connection or production fallback allowed.');
+    }
+
+    return [
+        'default' => 'superpdp_sandbox',
+        'connections' => ['superpdp_sandbox' => [
+            'driver' => 'mysql', 'host' => env('DB_HOST'), 'port' => env('DB_PORT', '3306'),
+            'database' => 'fabyjulien_simpledevis_test', 'username' => 'fabyjulien_simpledevis_test',
+            'password' => env('DB_PASSWORD'), 'charset' => 'utf8mb4', 'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '', 'prefix_indexes' => true, 'strict' => true, 'engine' => 'InnoDB',
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ]],
+        'migrations' => ['table' => 'migrations', 'update_date_on_publish' => true],
+    ];
+}
+
 return [
 
     /*

@@ -59,6 +59,7 @@ return [
     */
 
     'superpdp' => [
+        'environment' => env('SUPERPDP_ENVIRONMENT'),
         // Origine seule : les requêtes SDK d'annuaire ajoutent /v1.beta.
         'directory_base_url' => env('SUPERPDP_DIRECTORY_BASE_URL', 'https://api.superpdp.tech'),
         'client_id' => env('SUPERPDP_CLIENT_ID'),

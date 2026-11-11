@@ -21,10 +21,10 @@ class SuperPdpInvoicePayloadValidator
 
     private readonly Validator $validator;
 
-    public function __construct()
+    public function __construct(?string $schemaPath = null)
     {
         $this->schema = json_decode(
-            file_get_contents(resource_path('schemas/superpdp/'.self::SCHEMA_VERSION.'/en-invoice.schema.json')),
+            file_get_contents($schemaPath ?? resource_path('schemas/superpdp/'.self::SCHEMA_VERSION.'/en-invoice.schema.json')),
             false, 512, JSON_THROW_ON_ERROR
         );
         // A null resolver means external references cannot be fetched, even accidentally.

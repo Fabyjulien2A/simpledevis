@@ -104,6 +104,9 @@ final class ReadOnlyQualificationGateway
         $error = null;
         if (! $connection || $connection->status !== 'connected') {
             $error = 'connection_unavailable';
+        } elseif ($environment !== config('services.superpdp.environment') || $connection->environment !== $environment || $connection->oauth_client_id !== $clientId
+            || $connection->api_url !== config('services.superpdp.api_url')) {
+            $error = 'oauth_environment_or_client_mismatch';
         } elseif (! is_int($expectedId) || $expectedId <= 0) {
             $error = 'provider_company_id_missing';
         } elseif ($clientId === '') {

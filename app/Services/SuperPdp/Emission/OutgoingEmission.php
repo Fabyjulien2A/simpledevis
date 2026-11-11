@@ -20,7 +20,7 @@ final class OutgoingEmission
     public function reserve(User $actor, Invoice $invoice, string $reference, bool $retryRejected = false): ElectronicInvoiceAttempt
     {
         EmissionDocument::assertReference($reference, $actor->id, $invoice->id);
-        $this->assertTestTransport();
+        $this->assertExecutionTransport();
         $this->outsideTransaction($invoice);
 
         return $invoice->getConnection()->transaction(function () use ($actor, $invoice, $reference, $retryRejected) {
@@ -36,7 +36,7 @@ final class OutgoingEmission
                 $record->setConnection($stored->getConnectionName());
                 $record->forceFill([
                     'invoice_id' => $stored->id, 'dispatch_key' => $this->key($stored),
-                    'local_reference' => (string) Str::uuid(), 'execution_mode' => 'test',
+                    'local_reference' => (string) Str::uuid(), 'execution_mode' => $this->transport->mode(),
                     'environment' => $document->environment, 'provider_company_id' => $document->companyId,
                     'document_reference' => $reference, 'cii_sha256' => $document->sha256, 'status' => 'pending',
                 ])->save();
@@ -64,7 +64,7 @@ final class OutgoingEmission
 
     public function dispatch(User $actor, ElectronicInvoice $record, int $attemptId): ElectronicInvoiceAttempt
     {
-        $this->assertTestTransport();
+        $this->assertExecutionTransport();
         $invoice = $this->invoiceFor($record);
         $this->outsideTransaction($invoice);
         $claim = $this->withRecord($actor, $record, function ($locked, $stored) use ($actor, $attemptId) {
@@ -79,6 +79,9 @@ final class OutgoingEmission
                 $document = $this->gate->authorize($actor, $stored, $locked->document_reference);
                 $this->matchDocument($actor, $stored, $document, $locked->document_reference);
                 $this->matchRecord($locked, $document);
+                if ($this->transport instanceof SandboxSdkEmissionTransport) {
+                    $this->transport->assertAttemptAuthorized($attempt->reference);
+                }
             } catch (\PDOException $exception) {
                 // QueryException hérite de PDOException. Un deadlock peut avoir déjà
                 // annulé la transaction côté serveur : ne plus écrire dans ce callback.
@@ -135,7 +138,7 @@ final class OutgoingEmission
     /** Un crash après la prise en charge ne remet JAMAIS la tentative dans la file d'envoi. */
     public function recoverInterrupted(User $actor, ElectronicInvoice $record, int $attemptId): ElectronicInvoiceAttempt
     {
-        $this->assertTestTransport();
+        $this->assertExecutionTransport();
 
         return $this->withRecord($actor, $record, function ($locked) use ($attemptId) {
             $attempt = $locked->attempts()->whereKey($attemptId)->lockForUpdate()->firstOrFail();
@@ -151,7 +154,7 @@ final class OutgoingEmission
     /** Seule une preuve POSITIVE permet de résoudre l'inconnu, jamais l'absence dans une liste. */
     public function reconcile(User $actor, ElectronicInvoice $record, int $attemptId, int $remoteId): ElectronicInvoiceAttempt
     {
-        $this->assertTestTransport();
+        $this->assertExecutionTransport();
         $invoice = $this->invoiceFor($record);
         $this->outsideTransaction($invoice);
         $snapshot = $this->withRecord($actor, $record, function ($locked) use ($attemptId) {
@@ -181,7 +184,7 @@ final class OutgoingEmission
                 return $attempt;
             }
             $attempt->reconciliation = ['result' => 'positive_remote_match', 'remote_id' => $remoteId,
-                'cii_sha256' => $attempt->cii_sha256, 'at' => now()->toIso8601String(), 'mode' => 'test'];
+                'cii_sha256' => $attempt->cii_sha256, 'at' => now()->toIso8601String(), 'mode' => $this->transport->mode()];
             $this->transition($locked, $attempt, 'accepted', 'reconciled_positive', null, $remoteId);
 
             return $attempt;
@@ -191,7 +194,7 @@ final class OutgoingEmission
     /** Une page par appel ; le curseur ne progresse qu'après validation de TOUTE la page. */
     public function syncEvents(User $actor, ElectronicInvoice $record): array
     {
-        $this->assertTestTransport();
+        $this->assertExecutionTransport();
         $this->outsideTransaction($this->invoiceFor($record));
         $snapshot = $this->withRecord($actor, $record, fn ($locked) => $locked);
         if ($snapshot->status !== 'accepted' || $snapshot->provider_invoice_id === null) {
@@ -222,7 +225,7 @@ final class OutgoingEmission
 
     public function applyEvents(User $actor, ElectronicInvoice $record, array $events): int
     {
-        $this->assertTestTransport();
+        $this->assertExecutionTransport();
         if (! array_is_list($events)) {
             $this->deny('liste d’événements attendue');
         }
@@ -323,8 +326,12 @@ final class OutgoingEmission
         return $invoice->getConnection()->transaction(function () use ($actor, $record, $invoice, $operation) {
             $stored = $this->lockedInvoice($actor, $invoice);
             $locked = ElectronicInvoice::on($stored->getConnectionName())->whereKey($record->id)->lockForUpdate()->firstOrFail();
-            if ($locked->invoice_id !== $stored->id || $locked->dispatch_key !== $this->key($stored) || $locked->execution_mode !== 'test') {
+            if ($locked->invoice_id !== $stored->id || $locked->dispatch_key !== $this->key($stored) || $locked->execution_mode !== $this->transport->mode()) {
                 $this->deny('registre sortant non autorisé');
+            }
+
+            if ($this->transport instanceof SandboxSdkEmissionTransport) {
+                $this->transport->assertRegistryScope($locked);
             }
 
             return $operation($locked, $stored);
@@ -361,7 +368,7 @@ final class OutgoingEmission
 
     private function matchRecord(ElectronicInvoice $record, EmissionDocument $doc): void
     {
-        if ($record->execution_mode !== 'test' || $record->environment !== $doc->environment
+        if ($record->execution_mode !== $this->transport->mode() || $record->environment !== $doc->environment
             || $record->provider_company_id !== $doc->companyId || $record->document_reference !== $doc->reference
             || ! hash_equals($record->cii_sha256, $doc->sha256)) {
             $this->deny('document ou contexte différent de la réservation');
@@ -403,8 +410,13 @@ final class OutgoingEmission
         return 'superpdp:'.$invoice->id;
     }
 
-    private function assertTestTransport(): void
+    private function assertExecutionTransport(): void
     {
+        if ($this->transport instanceof SandboxSdkEmissionTransport) {
+            $this->transport->assertReady();
+
+            return;
+        }
         if (! app()->environment('testing') || $this->transport->mode() !== 'test') {
             $this->deny('transport applicatif fermé');
         }

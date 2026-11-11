@@ -379,6 +379,12 @@ public function downloadPdf(
         }
 
         try {
+            $connection->assertOAuthContext(
+                (string) config('services.superpdp.environment'),
+                (string) config('services.superpdp.client_id'),
+                (string) config('services.superpdp.api_url')
+            );
+
             /*
              * Il est indispensable de transmettre l’URL configurée.
              *
@@ -400,7 +406,6 @@ public function downloadPdf(
 
             if ($superPdpResponse->failed()) {
                 $status = $superPdpResponse->status();
-                $body = $superPdpResponse->body();
 
                 logger()->warning(
                     'Échec du téléchargement SUPER PDP.',
@@ -413,7 +418,6 @@ public function downloadPdf(
                                 ->superpdp_invoice_id,
 
                         'status' => $status,
-                        'response' => $body,
                         'api_url' => $apiUrl,
                     ]
                 );
@@ -492,7 +496,9 @@ public function downloadPdf(
                 ]
             );
         } catch (Throwable $exception) {
-            report($exception);
+            logger()->warning('Téléchargement SUPER PDP indisponible.', [
+                'supplier_invoice_id' => $supplierInvoice->id,
+            ]);
 
             return redirect()
                 ->route(

@@ -48,6 +48,8 @@ final class InvoicePartyVerification
             return $this->finish($actor, $stored, $report);
         }
         $report['expected_provider_company_id'] = $gateway->expectedCompanyId;
+        $report['expected_oauth_client_id'] = $gateway->expectedClientId;
+        $report['expected_api_url'] = config('services.superpdp.api_url');
         try {
             $observation = $gateway->directory(FrenchSellerIdentifiers::sirenFromSiret($data['buyer']['siret']));
             $qualified = $this->routing->assess($data, $observation->data);
@@ -64,8 +66,8 @@ final class InvoicePartyVerification
             $report['checks']['buyer_destination'] = $this->error($exception);
         }
         // Vérifications distinctes : identité/KYB, présence d'une adresse de réception, droit d'émettre.
-        $report['checks']['seller_emission_permission'] = $this->result('unavailable', 'session_contract_does_not_expose_send_permission');
-        $report['checks']['seller_bt34_sending_binding'] = $this->result('unavailable', 'directory_contract_only_documents_receiving_addresses');
+        $report['checks']['seller_emission_permission'] = $this->result('not_required', 'support_confirms_authorization_code_without_extra_send_permission');
+        $report['checks']['seller_bt34_sending_binding'] = $this->result('not_required', 'support_confirms_no_bt34_activation');
         try {
             $session = $gateway->session();
             $report['checks']['seller_session'] = $this->session($session, $gateway->expectedClientId);
@@ -225,7 +227,9 @@ final class InvoicePartyVerification
 
     private function finish(User $actor, Invoice $invoice, array $report): array
     {
-        $states = array_column($report['checks'], 'status');
+        // Publication of a receiving address is informational, never an emission prerequisite.
+        $required = array_diff_key($report['checks'], array_flip(['seller_bt34_receiving_publication']));
+        $states = array_column($required, 'status');
         $report['status'] = in_array('refused', $states, true) ? 'refused' : (in_array('ambiguous', $states, true) ? 'ambiguous' : (in_array('unavailable', $states, true) ? 'unavailable' : 'passed'));
         $report['audit_reference'] = $this->audit->store($actor, $invoice, $report);
 

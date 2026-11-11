@@ -7,19 +7,28 @@ utilisent `ClosedEmissionPrerequisites` et `DisabledEmissionTransport`. Le diagn
 global est inchangé. Aucune route, tâche planifiée, commande, émission ou connexion
 réseau réelle n’est ajoutée ou activée.
 
-L’orchestrateur exige actuellement `APP_ENV=testing` et un transport de mode `test`.
+Mise à jour du 11 novembre 2026 : un [raccordement sandbox explicitement autorisé](superpdp-sandbox-emission-transport.md)
+est préparé via `SandboxEmissionFactory`. Il réutilise cet orchestrateur, avec
+lecture privée d’archives validées et transport SDK limité à une société sandbox.
+Il reste bloqué par défaut et n’altère pas les liaisons applicatives ci-dessus.
+Les paragraphes suivants décrivent le parcours de test initial ; le nouveau mode
+`sandbox` impose en plus les contrôles de contexte et l’autorisation documentés.
+
+Le parcours de test de l’orchestrateur exige `APP_ENV=testing` et un transport de mode `test`.
 L’adaptateur SDK `SdkTestEmissionTransport` exige lui aussi cet environnement,
 à la construction et avant chaque opération. Il accepte seulement des
 `MockResponse` en mémoire, pas de fixture enregistrable ni de callback de transport.
 Il ne lit aucun jeton ou paramètre de la réception. Une réponse manquante échoue
-sans repli réseau. Aucun paramètre de configuration ne permet d’ouvrir l’émission.
+sans repli réseau. L’adaptateur de test ne peut pas être transformé en transport réel
+par configuration. Le transport sandbox séparé reste soumis à son verrou et à une
+autorisation de confiance limitée à l’archive et à l’UUID d’une tentative.
 
 Les références `invoice-cii/v1/simulations/...` de l’étape 2 et tout mode de document
-simulé sont refusés avant réservation. Le contrat `EmissionPrerequisites` devra
-ultérieurement disposer d’un lecteur d’archives **réelles, privées et validées**,
-avec preuves fraîches de routage/habilitation et relecture du CII exact.
+simulé sont refusés avant réservation. Le contrat `EmissionPrerequisites` dispose
+désormais du lecteur sandbox d’archives **réelles, privées et validées**, avec
+preuves fraîches de destination/identité et relecture du CII exact.
 Ce lecteur n’est pas remplacé par une simple chaîne de chemin : le défaut reste
-un refus systématique. Les tests injectent un faux lecteur exclusivement pour
+un refus systématique. Les tests historiques injectent un faux lecteur pour
 exercer la mécanique, sans promouvoir leurs données fictives en preuves réelles.
 
 ## Réservation et tentatives

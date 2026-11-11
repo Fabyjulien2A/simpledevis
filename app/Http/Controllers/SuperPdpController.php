@@ -16,8 +16,7 @@ class SuperPdpController extends Controller
     public function __construct(
         private readonly SuperPdpOAuthService $oauthService,
         private readonly SuperPdpInvoiceService $invoiceService
-    ) {
-    }
+    ) {}
 
     /**
      * Affiche la page de configuration SUPER PDP.
@@ -59,7 +58,7 @@ class SuperPdpController extends Controller
             'Aucune entreprise associée à ce compte.'
         );
 
-        if (!$company->siret) {
+        if (! $company->siret) {
             return redirect()
                 ->route('electronic-invoicing.index')
                 ->with(
@@ -94,22 +93,17 @@ class SuperPdpController extends Controller
     public function callback(Request $request): RedirectResponse
     {
         if ($request->filled('error')) {
-            $error = $request
-                ->string('error')
-                ->toString();
+            $this->oauthService->cancelAuthorization();
 
-            $description = $request
-                ->string('error_description')
-                ->toString();
+            return redirect()->route('electronic-invoicing.index')
+                ->with('error', 'Autorisation SUPER PDP refusée ou annulée. Recommencez la connexion.');
+        }
 
-            return redirect()
-                ->route('electronic-invoicing.index')
-                ->with(
-                    'error',
-                    $description
-                        ? "SUPER PDP : {$description}"
-                        : "Erreur OAuth SUPER PDP : {$error}"
-                );
+        if (! $request->filled('code') || ! $request->filled('state')
+            || ! is_string($request->input('code')) || ! is_string($request->input('state'))) {
+            $this->oauthService->cancelAuthorization();
+
+            return redirect()->route('electronic-invoicing.index')->with('error', 'Retour OAuth incomplet. Recommencez la connexion.');
         }
 
         $validated = $request->validate([
@@ -129,16 +123,6 @@ class SuperPdpController extends Controller
                     'success',
                     'Votre entreprise est maintenant connectée à SUPER PDP.'
                 );
-        } catch (RequestException $exception) {
-            report($exception);
-
-            $message = $exception->response?->json('error_description')
-                ?? $exception->response?->json('error')
-                ?? 'SUPER PDP a refusé l’échange du code OAuth.';
-
-            return redirect()
-                ->route('electronic-invoicing.index')
-                ->with('error', $message);
         } catch (RuntimeException $exception) {
             report($exception);
 
@@ -172,7 +156,7 @@ class SuperPdpController extends Controller
 
         $connection = $company->superPdpConnection;
 
-        if (!$connection || $connection->status !== 'connected') {
+        if (! $connection || $connection->status !== 'connected') {
             return redirect()
                 ->route('electronic-invoicing.index')
                 ->with(
@@ -226,6 +210,7 @@ class SuperPdpController extends Controller
      */
     public function disconnect(): RedirectResponse
     {
+        $this->oauthService->cancelAuthorization();
         $company = auth()->user()->company;
 
         abort_unless(

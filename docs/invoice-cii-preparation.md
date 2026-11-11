@@ -1,5 +1,10 @@
 # Étape 2 : routage et préparation CII hors ligne
 
+Le parcours de simulation décrit ici est conservé. Le nouveau
+[producteur d’archives CII](superpdp-cii-producer.md) ajoute une préparation API
+sandbox séparée, fermée par défaut, avec une provenance calculée depuis le SDK.
+Aucun résultat simulé de cette étape n’est promu en validation réelle.
+
 ## Périmètre et sécurité
 
 Le parcours interne `InvoiceCiiPreparation::prepare(User, Invoice,

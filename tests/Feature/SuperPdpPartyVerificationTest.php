@@ -27,7 +27,7 @@ beforeEach(function () {
     Http::preventStrayRequests();
     Config::preventStrayRequests();
     Storage::fake('invoice_cii');
-    config(['services.superpdp.client_id' => 'verification-client', 'services.superpdp.directory_base_url' => 'https://api.superpdp.tech', 'superpdp_verification.live_reads_enabled' => false]);
+    config(['services.superpdp.environment' => 'production', 'services.superpdp.client_id' => 'verification-client', 'services.superpdp.directory_base_url' => 'https://api.superpdp.tech', 'superpdp_verification.live_reads_enabled' => false]);
     $this->owner = User::factory()->create();
     $this->company = $this->owner->company()->create([
         'company_name' => 'Historical seller', 'siret' => '73282932000074', 'country_code' => 'FR', 'address' => '1 rue Fictive', 'postal_code' => '75001', 'city' => 'Paris',
@@ -44,7 +44,7 @@ beforeEach(function () {
             'tva_rate' => '20', 'unit_code' => 'C62', 'tax_treatment' => 'taxable']],
     ])->assertSessionHasNoErrors();
     $this->invoice = Invoice::sole();
-    $this->connection = $this->company->superPdpConnection()->create(['superpdp_company_id' => 123, 'access_token' => 'ACCESS-TOKEN-NOT-LOGGED',
+    $this->connection = $this->company->superPdpConnection()->create(['environment' => 'production', 'oauth_client_id' => 'verification-client', 'api_url' => config('services.superpdp.api_url'), 'superpdp_company_id' => 123, 'access_token' => 'ACCESS-TOKEN-NOT-LOGGED',
         'refresh_token' => 'REFRESH-TOKEN-NOT-USED', 'access_token_expires_at' => now()->addHours(2), 'status' => 'connected', 'reception_enabled' => true,
         'last_invoice_id' => 11, 'last_event_id' => 22]);
     $this->remoteCompany = ['id' => 123, 'created_at' => '2026-11-01T12:00:00+00:00', 'env' => 'production', 'number_scheme' => 'fr_siren',
@@ -87,13 +87,13 @@ it('wires the four documented GETs to historical parties and stores only sanitiz
         }
     });
     $result = ($this->verify)();
-    expect($result['status'])->toBe('unavailable')->and($result['emission_ready'])->toBeFalse()
+    expect($result['status'])->toBe('passed')->and($result['emission_ready'])->toBeFalse()
         ->and($result['checks']['buyer_destination']['status'])->toBe('passed')
         ->and($result['checks']['seller_identity']['status'])->toBe('passed')
         ->and($result['checks']['seller_session']['status'])->toBe('passed')
         ->and($result['checks']['seller_bt34_receiving_publication']['status'])->toBe('passed')
-        ->and($result['checks']['seller_emission_permission']['status'])->toBe('unavailable')
-        ->and($result['checks']['seller_bt34_sending_binding']['status'])->toBe('unavailable');
+        ->and($result['checks']['seller_emission_permission']['status'])->toBe('not_required')
+        ->and($result['checks']['seller_bt34_sending_binding']['status'])->toBe('not_required');
     foreach ($result['checks'] as $check) {
         expect($check['verified'])->toBeFalse();
     }
@@ -189,8 +189,8 @@ it('limits the meaning of owned directory entries to receiving publication', fun
     };
     $result = ($this->verify)([ListDirectoryEntriesRequest::class => MockResponse::make($body)]);
     expect($result['checks']['seller_bt34_receiving_publication']['status'])->toBe($status)
-        ->and($result['checks']['seller_bt34_sending_binding']['status'])->toBe('unavailable')
-        ->and($result['checks']['seller_emission_permission']['status'])->toBe('unavailable')->and($result['emission_ready'])->toBeFalse();
+        ->and($result['checks']['seller_bt34_sending_binding']['status'])->toBe('not_required')
+        ->and($result['checks']['seller_emission_permission']['status'])->toBe('not_required')->and($result['emission_ready'])->toBeFalse();
 })->with([['pending', 'unavailable'], ['error', 'refused'], ['replyto', 'refused'], ['missing_replyto', 'unavailable'], ['foreign', 'refused'], ['future', 'unavailable'],
     ['invalid_date', 'ambiguous'], ['unknown', 'ambiguous'], ['empty', 'unavailable'], ['multiple', 'ambiguous'], ['partial', 'ambiguous'], ['object', 'ambiguous']]);
 
@@ -200,8 +200,8 @@ it('does not turn a receive mandate or unrecognized sending flags into sending a
     $this->ownEntry['sender_authorized'] = true;
     $result = ($this->verify)();
     expect($result['checks']['seller_bt34_receiving_publication']['status'])->toBe('passed')
-        ->and($result['checks']['seller_bt34_sending_binding']['status'])->toBe('unavailable')
-        ->and($result['checks']['seller_emission_permission']['status'])->toBe('unavailable');
+        ->and($result['checks']['seller_bt34_sending_binding']['status'])->toBe('not_required')
+        ->and($result['checks']['seller_emission_permission']['status'])->toBe('not_required');
 });
 
 it('does not refresh or reuse unavailable credentials while public routing can still be assessed', function (string $case) {
@@ -285,4 +285,19 @@ it('discards provider secrets even inside otherwise valid responses', function (
     $stored = app(VerificationAuditStore::class)->read($this->owner, $this->invoice, $result['audit_reference']);
     expect(json_encode($stored))->not->toContain('PROVIDER-SECRET', 'private_note', 'access_token')
         ->and($stored['checks']['seller_session']['response_sha256'])->toMatch('/\A[a-f0-9]{64}\z/');
+});
+
+it('does not require a published BT34 receiving address to check emission identity', function () {
+    $result = ($this->verify)([ListDirectoryEntriesRequest::class => MockResponse::make(['error' => 'unavailable'], 503)]);
+    expect($result['status'])->toBe('passed')->and($result['emission_ready'])->toBeFalse()
+        ->and($result['checks']['seller_bt34_receiving_publication']['status'])->toBe('unavailable')
+        ->and($result['checks']['seller_bt34_sending_binding']['status'])->toBe('not_required')
+        ->and($result['checks']['seller_emission_permission']['status'])->toBe('not_required');
+});
+
+it('does not send credentials from another configured environment', function () {
+    config(['services.superpdp.environment' => 'sandbox']);
+    $result = ($this->verify)();
+    expect($result['checks']['seller_identity']['reason'])->toBe('oauth_environment_or_client_mismatch');
+    expect(array_column($this->seen, 'class'))->toBe([ListFrenchDirectoryEntriesRequest::class]);
 });

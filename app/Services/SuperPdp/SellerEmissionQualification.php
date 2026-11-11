@@ -39,9 +39,9 @@ final class SellerEmissionQualification
             'company_id' => is_int($company['id'] ?? null) ? $company['id'] : null,
             'company_response_sha256' => hash('sha256', json_encode($company, JSON_THROW_ON_ERROR)),
             'session_response_sha256' => hash('sha256', json_encode($session, JSON_THROW_ON_ERROR)),
-            // /oauth2_sessions/me ne décrit pas le droit send ni le rattachement de BT-34.
-            // Un mandat in, une connexion receive ou KYB verified ne les remplacent pas.
-            'pending_evidence' => ['real_authenticated_checks', 'outbound_authorization', 'bt34_provider_association'],
+            // Support SUPER PDP : Authorization Code, sans permission send supplémentaire
+            // ni activation BT-34. Une simulation ne constitue pas une preuve réelle.
+            'pending_evidence' => ['real_authenticated_checks'],
         ];
     }
 }
