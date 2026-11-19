@@ -7,12 +7,19 @@ use App\Http\Controllers\CompanySettingController;
 use App\Http\Controllers\CreditNoteController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\InvoiceCiiDownloadController;
+use App\Http\Controllers\InvoiceCiiPreparationRequestController;
+use App\Http\Controllers\InvoiceElectronicPreparationController;
+use App\Http\Controllers\InvoiceElectronicEmissionController;
+use App\Http\Controllers\InvoiceDestinationVerificationController;
+use App\Http\Controllers\InvoiceFinalizationSummaryController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QuoteController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\SuperPdpController;
 use App\Http\Controllers\SupplierInvoiceController;
+use App\Http\Controllers\TricatelDraftPreviewController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -153,10 +160,33 @@ Route::middleware(['auth'])->group(function () {
         [InvoiceController::class, 'store']
     )->name('invoices.store');
 
+    Route::post('/invoices/electronic-summary', InvoiceFinalizationSummaryController::class)
+        ->name('invoices.electronic-summary');
+
     Route::get(
         '/invoices/{invoice}',
         [InvoiceController::class, 'show']
     )->name('invoices.show');
+
+    Route::get('/invoices/{invoice}/electronic-preparation', InvoiceElectronicPreparationController::class)
+        ->name('invoices.electronic-preparation');
+    Route::post('/invoices/{invoice}/electronic-emission', InvoiceElectronicEmissionController::class)
+        ->middleware('throttle:electronic-emission-request')->name('invoices.request-electronic-emission');
+
+    Route::post('/invoices/{invoice}/electronic-preparation/prepare-cii', InvoiceCiiPreparationRequestController::class)
+        ->middleware('throttle:cii-preparation-request')
+        ->name('invoices.request-cii-preparation');
+
+    Route::get('/invoices/{invoice}/electronic-preparation/cii/{reservation}', InvoiceCiiDownloadController::class)
+        ->where('reservation', '[a-f0-9]{64}')
+        ->name('invoices.cii-download');
+
+    Route::get('/invoices/{invoice}/sandbox-electronic-preview', TricatelDraftPreviewController::class)
+        ->name('invoices.sandbox-electronic-preview');
+
+    Route::post('/invoices/{invoice}/electronic-preparation/verify-destination', InvoiceDestinationVerificationController::class)
+        ->middleware('throttle:invoice-destination')
+        ->name('invoices.verify-destination');
 
     Route::get(
         '/invoices/{invoice}/edit',
@@ -229,7 +259,7 @@ Route::middleware(['auth'])->group(function () {
         [SuperPdpController::class, 'index']
     )->name('electronic-invoicing.index');
 
-    Route::get(
+    Route::post(
         '/facturation-electronique/connect',
         [SuperPdpController::class, 'connect']
     )->name('electronic-invoicing.connect');

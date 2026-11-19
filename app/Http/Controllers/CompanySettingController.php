@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Rules\IsoCountryCode;
+use App\Services\SuperPdp\CompanyDeclaredBillingAddress;
 use App\Services\SuperPdp\DeclaredBillingAddress;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -89,7 +90,9 @@ class CompanySettingController extends Controller
                 abort_unless($company->user_id === $user->id, 403);
             }
             if (array_key_exists('billing_electronic_address', $data) || array_key_exists('siret', $data)) {
-                $data['billing_electronic_address'] = DeclaredBillingAddress::validate(
+                $data['billing_electronic_address'] = CompanyDeclaredBillingAddress::validate(
+                    $user,
+                    $company,
                     array_key_exists('billing_electronic_address', $data) ? $data['billing_electronic_address'] : $company?->billing_electronic_address,
                     array_key_exists('siret', $data) ? $data['siret'] : $company?->siret,
                 );

@@ -74,6 +74,17 @@ class Invoice extends Model
 
     protected static function booted(): void
     {
+        static::retrieved(function (Invoice $invoice) {
+            if (\App\Services\SuperPdp\SandboxInvoiceProfile::is($invoice)) {
+                \App\Services\SuperPdp\SandboxInvoiceProfile::assertRuntime();
+            }
+        });
+        static::creating(function (Invoice $invoice) {
+            if (\App\Services\SuperPdp\SandboxInvoiceProfile::is($invoice)) {
+                \App\Services\SuperPdp\SandboxInvoiceProfile::assertRuntime();
+                abort_unless(auth()->id() === 3 && $invoice->user_id === 3, 403);
+            }
+        });
         static::updating(function (Invoice $invoice) {
             if (! $invoice->isDirty(['emission_context', 'emission_profile'])) {
                 return;
@@ -114,6 +125,15 @@ class Invoice extends Model
                 ]);
             }
         });
+    }
+
+    public function resolveRouteBinding($value, $field = null)
+    {
+        $invoice = parent::resolveRouteBinding($value, $field);
+        if ($invoice && \App\Services\SuperPdp\SandboxInvoiceProfile::is($invoice)) {
+            \App\Services\SuperPdp\SandboxInvoiceProfile::assertRuntime();
+        }
+        return $invoice;
     }
 
     public function electronicInvoices(): HasMany

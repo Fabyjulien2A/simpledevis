@@ -2,6 +2,7 @@
 
 namespace App\Services\SuperPdp\Emission;
 
+use App\Models\Company;
 use App\Models\ElectronicInvoice;
 use App\Models\ElectronicInvoiceAttempt;
 use App\Models\ElectronicInvoiceStatus;
@@ -16,6 +17,59 @@ use Throwable;
 final class OutgoingEmission
 {
     public function __construct(private readonly EmissionPrerequisites $gate, private readonly EmissionTransport $transport) {}
+
+    /** Local status only: no reservation, recovery, reconciliation, event fetch or transport call. */
+    public function consult(User $actor, Invoice $invoice): array
+    {
+        abort_unless($actor->exists && $invoice->user_id === $actor->id, 403);
+        $stored = $invoice->newQuery()->findOrFail($invoice->id);
+        abort_unless($stored->user_id === $actor->id, 403);
+        abort_unless($stored->isIssued(), 404);
+        $company = Company::on($stored->getConnectionName())->where('user_id', $actor->id)->first();
+        abort_unless(in_array($stored->getRawOriginal('company_id'), [null, $company?->id], true), 403);
+        $rows = ElectronicInvoice::on($stored->getConnectionName())->where('invoice_id', $stored->id)->limit(2)->get();
+        $none = ['state' => 'none', 'label' => 'Aucune émission demandée.', 'date' => null, 'messages' => [], 'simulation' => false];
+        if ($rows->isEmpty()) {
+            return $none;
+        }
+        $connection = $company?->superPdpConnection()->first();
+        $record = $rows->first();
+        $review = array_replace($none, ['state' => 'review', 'label' => 'Historique d’émission à examiner.',
+            'messages' => ['Le registre ne correspond pas de manière certaine à l’entreprise et au contexte fournisseur actuels. Aucun nouvel envoi autorisé.']]);
+        if ($rows->count() !== 1 || $connection === null || $record->dispatch_key !== $this->key($stored)
+            || $record->provider_company_id !== $connection->superpdp_company_id || $record->environment !== $connection->environment) {
+            return $review;
+        }
+        $attempt = $record->attempts()->orderByDesc('number')->first();
+        if ($attempt === null || $attempt->cii_sha256 !== $record->cii_sha256 || $attempt->status !== $record->status) {
+            return $review;
+        }
+        if ($attempt->status === 'accepted' && (! is_int($record->provider_invoice_id) || $record->provider_invoice_id <= 0
+            || $attempt->provider_invoice_id !== $record->provider_invoice_id)) {
+            return $review;
+        }
+        $simulation = $record->execution_mode === 'test';
+        if (! in_array($record->execution_mode, ['test', 'sandbox'], true)) {
+            return $review;
+        }
+        $label = match ($attempt->status) {
+            'pending' => $attempt->transport_started_at === null ? 'Tentative réservée, dépôt non commencé.' : 'Dépôt commencé, résultat à vérifier.',
+            'accepted' => $simulation ? 'Simulation de dépôt acceptée.' : 'Dépôt accepté par SUPER PDP.',
+            'rejected' => 'Dépôt refusé.',
+            'unknown' => 'Résultat du dépôt incertain, examen requis.',
+            default => 'État du dépôt à examiner.',
+        };
+        $reason = match ($attempt->error_code) {
+            'local_precondition_failed' => 'Les prérequis locaux ont refusé le dépôt.',
+            'provider_bad_request' => 'SUPER PDP a refusé la demande de dépôt.',
+            'transport_uncertain', 'ambiguous_response', 'result_persistence_uncertain', 'interrupted_dispatch', 'remote_binding_conflict' => 'Le résultat ne permet pas une relance sûre. Un examen est nécessaire.',
+            default => 'Une tentative existe déjà. Aucun nouvel envoi ni aucune relance automatique depuis cette page.',
+        };
+
+        return ['state' => $attempt->status, 'label' => $label,
+            'date' => ($attempt->finished_at ?? $attempt->created_at)?->copy()->timezone('Europe/Paris')->format('d/m/Y H:i:s'),
+            'simulation' => $simulation, 'messages' => [$reason, 'Un dépôt accepté ne prouve pas la livraison au destinataire.']];
+    }
 
     public function reserve(User $actor, Invoice $invoice, string $reference, bool $retryRejected = false): ElectronicInvoiceAttempt
     {
@@ -62,12 +116,12 @@ final class OutgoingEmission
         });
     }
 
-    public function dispatch(User $actor, ElectronicInvoice $record, int $attemptId): ElectronicInvoiceAttempt
+    public function dispatch(User $actor, ElectronicInvoice $record, int $attemptId, ?callable $confirmation = null): ElectronicInvoiceAttempt
     {
         $this->assertExecutionTransport();
         $invoice = $this->invoiceFor($record);
         $this->outsideTransaction($invoice);
-        $claim = $this->withRecord($actor, $record, function ($locked, $stored) use ($actor, $attemptId) {
+        $claim = $this->withRecord($actor, $record, function ($locked, $stored) use ($actor, $attemptId, $confirmation) {
             $attempt = $locked->attempts()->whereKey($attemptId)->lockForUpdate()->firstOrFail();
             if ($attempt->status !== 'pending' || $attempt->transport_started_at !== null) {
                 return ['attempt' => $attempt];
@@ -76,6 +130,13 @@ final class OutgoingEmission
                 $this->deny('tentative périmée');
             }
             try {
+                // HTTP confirmation is rechecked under the same lock as the transport claim.
+                if ($confirmation === null && collect($attempt->history)->contains(fn ($entry) => ($entry['reason'] ?? null) === 'http_authorized')) {
+                    $this->deny('confirmation HTTP requise pour cette tentative');
+                }
+                if ($confirmation !== null) {
+                    $confirmation($locked, $attempt, $stored);
+                }
                 $document = $this->gate->authorize($actor, $stored, $locked->document_reference);
                 $this->matchDocument($actor, $stored, $document, $locked->document_reference);
                 $this->matchRecord($locked, $document);
@@ -413,7 +474,7 @@ final class OutgoingEmission
     private function assertExecutionTransport(): void
     {
         if ($this->transport instanceof SandboxSdkEmissionTransport) {
-            $this->transport->assertReady();
+            $this->transport->assertRegistryReady();
 
             return;
         }

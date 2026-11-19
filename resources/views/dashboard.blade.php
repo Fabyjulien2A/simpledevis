@@ -1,14 +1,4 @@
 <x-app-layout>
-    <x-slot name="header">
-        <div>
-            <h2 class="text-2xl font-bold leading-tight text-slate-900">
-                Tableau de bord
-            </h2>
-            <p class="mt-1 text-sm text-slate-500">
-                Vue d’ensemble de ton activité
-            </p>
-        </div>
-    </x-slot>
 
     @php
         $user = auth()->user();

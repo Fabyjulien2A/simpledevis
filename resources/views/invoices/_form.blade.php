@@ -57,9 +57,15 @@
         <label for="emission_profile" class="block text-sm font-medium text-gray-700 mb-2">Préparation de la facturation électronique</label>
         <select id="emission_profile" name="emission_profile" class="w-full rounded-lg border-gray-300">
             <option value="">Sans qualification électronique</option>
+            @if(\App\Services\SuperPdp\SandboxInvoiceProfile::available())
+                <option data-sandbox-profile value="{{ \App\Services\SuperPdp\SandboxInvoiceProfile::PROFILE }}" @selected(old('emission_profile', $invoice->emission_profile ?? '') === \App\Services\SuperPdp\SandboxInvoiceProfile::PROFILE)>Sandbox SUPER PDP</option>
+            @endif
             <option value="fr_b2b_380_eur" @selected(old('emission_profile', $invoice->emission_profile ?? '') === 'fr_b2b_380_eur')>Facture ordinaire B2B France — type 380 — EUR</option>
         </select>
-        <p class="mt-1 text-sm text-gray-600">Ce choix exige des parties françaises, un client professionnel, les identités et adresses complètes, SIRET, régime de TVA, mentions françaises, échéance ou conditions de paiement et adresses de facturation BT-34/BT-49 à la finalisation. Aucun paiement ni avoir définitif. Aucun envoi n’est activé ; le routage reste à vérifier.</p>
+        @if(\App\Services\SuperPdp\SandboxInvoiceProfile::available())
+            <p class="mt-2 font-semibold text-amber-900">Sandbox SUPER PDP : Facture de test — sans valeur fiscale. Burger Queen → Tricatel uniquement. Choisissez votre client Tricatel de test sans SIRET ; les identités sandbox restent distinctes des identifiants légaux.</p>
+        @endif
+        <p class="mt-1 text-sm text-gray-600">Le profil France B2B exige des parties françaises, un client professionnel, les identités et adresses complètes, SIRET, régime de TVA, mentions françaises, échéance ou conditions de paiement et adresses de facturation BT-34/BT-49 à la finalisation. Aucun paiement ni avoir définitif. Aucun envoi n’est activé ; le routage reste à vérifier.</p>
         @error('emission_profile') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
     </div>
 
@@ -337,6 +343,8 @@
     </div>
 
     
+@include('invoices.partials.finalization-summary-loader')
+
 {{-- Boutons --}}
 <div class="flex flex-wrap gap-3">
 

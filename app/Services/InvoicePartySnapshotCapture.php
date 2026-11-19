@@ -26,6 +26,18 @@ class InvoicePartySnapshotCapture
         'address', 'postal_code', 'city', 'country_code', 'email', 'phone',
     ];
 
+    /** Projection en mémoire des mêmes champs, sans archivage du logo ni écriture. */
+    public function previewParties(?Company $company, ?Client $client): array
+    {
+        $seller = array_intersect_key($company?->getRawOriginal() ?? [], array_flip(self::COMPANY_FIELDS));
+        unset($seller['logo']);
+        $buyer = array_intersect_key($client?->getRawOriginal() ?? [], array_flip(self::CLIENT_FIELDS));
+
+        return InvoiceElectronicPartyData::resolve([
+            'party_snapshot' => json_encode(InvoicePartySnapshot::capture($seller, $buyer), JSON_THROW_ON_ERROR),
+        ], true);
+    }
+
     public function captureForFinalization(Invoice $invoice): void
     {
         $connection = $invoice->getConnection();
@@ -75,7 +87,9 @@ class InvoicePartySnapshotCapture
         // Non fillable : l'instantané n'est jamais accepté depuis un formulaire.
         // jsonSerialize() conserve les parties vides sous forme d'objets JSON.
         $stored->party_snapshot = $snapshot->jsonSerialize();
-        $stored->emission_context = InvoiceEmissionContext::capture(
+        $stored->emission_context = \App\Services\SuperPdp\SandboxInvoiceProfile::is($stored)
+            ? \App\Services\SuperPdp\SandboxInvoiceProfile::capture($stored, $company, $client)
+            : InvoiceEmissionContext::capture(
             $stored->emission_profile, $company?->billing_electronic_address, $client->billing_electronic_address,
             $snapshot->toArray(),
         );

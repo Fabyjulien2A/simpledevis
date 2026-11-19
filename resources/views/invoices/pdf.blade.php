@@ -169,6 +169,9 @@
     </style>
 </head>
 <body>
+@if(\App\Services\SuperPdp\SandboxInvoiceProfile::is($invoice))
+    <p style="font-size: 16px; font-weight: bold;">Sandbox SUPER PDP — Facture de test — sans valeur fiscale</p>
+@endif
     <div class="document">
 
         @php

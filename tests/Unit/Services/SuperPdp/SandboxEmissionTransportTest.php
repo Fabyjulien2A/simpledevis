@@ -122,6 +122,78 @@ afterEach(function () {
     Config::allowStrayRequests();
 });
 
+it('revalidates expired archived bytes with fresh evidence without changing their conversion or history', function () {
+    config(['superpdp_preparation.sandbox_client_id' => 'sandbox-client']);
+    $this->manifest['conversion'] = ['source' => 'live', 'observed_at' => now()->toIso8601String(),
+        'response_sha256' => hash('sha256', $this->xml), 'input_sha256' => ($this->hash)($this->payload)];
+    ($this->publish)($this->manifest);
+    $oldReference = $this->reference;
+    $oldPath = $this->archivePath;
+    $oldManifestBytes = file_get_contents($oldPath.'/manifest.json');
+    $this->travel(16)->minutes();
+    try {
+        $fresh = $this->report;
+        $fresh['checked_at'] = now()->toIso8601String();
+        foreach ($fresh['checks'] as &$check) { $check['observed_at'] = now()->toIso8601String(); } unset($check);
+        $proof = app(VerificationAuditStore::class)->store($this->owner, $this->invoice, $fresh);
+        $report = PreparedCiiFixture::report($this->xml);
+        // Synthetic live receipt ONLY, with no sender or network call.
+        $pending = $this->createMock(\Saloon\Http\PendingRequest::class);
+        $pending->method('getMethod')->willReturn(\Saloon\Enums\Method::POST);
+        $pending->method('getUrl')->willReturn(SandboxEmissionAuthorization::API_URL.'/validation_reports');
+        $pending->method('query')->willReturn(new \Saloon\Repositories\ArrayStore);
+        $response = new \Saloon\Http\Response(new \GuzzleHttp\Psr7\Response(200, [], json_encode($report)), $pending,
+            new \GuzzleHttp\Psr7\Request('POST', SandboxEmissionAuthorization::API_URL.'/validation_reports'));
+        $receipt = \App\Services\SuperPdp\Verification\VerificationObservation::fromResponse(
+            ['operation' => 'validation', 'input_sha256' => hash('sha256', $this->xml), 'report' => $report], $response);
+        $archive = app(\App\Services\SuperPdp\PreparedCiiArchive::class);
+        $artifact = $archive->storeRevalidated($this->owner, $this->invoice, $oldReference, $receipt, $proof);
+        $new = $archive->readValidated($this->owner, $this->invoice, $artifact['reference']);
+        expect($new['xml'])->toBe($this->xml)->and($artifact['reference'])->not->toBe($oldReference)
+            ->and($new['manifest']['conversion'])->toBe($this->manifest['conversion'])
+            ->and($new['manifest']['original_prepared_at'])->toBe($this->manifest['prepared_at'])
+            ->and($new['manifest']['revalidated_from'])->toBe($oldReference)
+            ->and($new['manifest']['verification_reference'])->toBe($proof)
+            ->and(file_get_contents($oldPath.'/manifest.json'))->toBe($oldManifestBytes)
+            ->and(file_get_contents($oldPath.'/document.xml'))->toBe($this->xml)
+            ->and(ElectronicInvoice::count())->toBe(0);
+        $this->reference = $artifact['reference'];
+        $this->approval = array_replace($this->approval, ['approved_at' => now()->timestamp,
+            'expires_at' => now()->addMinutes(10)->timestamp, 'document_reference' => $this->reference]);
+        ($this->unlock)();
+        expect(($this->prepare)()->xml)->toBe($this->xml);
+    } finally { $this->travelBack(); }
+});
+
+it('refuses revalidation with stale simulated foreign or rejected validation receipts', function ($case) {
+    config(['superpdp_preparation.sandbox_client_id' => 'sandbox-client']);
+    $report = PreparedCiiFixture::report($this->xml);
+    if ($case === 'invalid report') { $report['data'][0]['is_valid'] = false; }
+    $pending = $this->createMock(\Saloon\Http\PendingRequest::class);
+    $pending->method('getMethod')->willReturn(\Saloon\Enums\Method::POST);
+    $pending->method('getUrl')->willReturn(SandboxEmissionAuthorization::API_URL.($case === 'wrong endpoint' ? '/invoices/convert' : '/validation_reports'));
+    $pending->method('query')->willReturn(new \Saloon\Repositories\ArrayStore);
+    $response = new \Saloon\Http\Response(new \GuzzleHttp\Psr7\Response($case === 'http' ? 400 : 200, [], json_encode($report)), $pending,
+        new \GuzzleHttp\Psr7\Request('POST', SandboxEmissionAuthorization::API_URL.'/validation_reports'));
+    if ($case === 'simulated') { $response->setMocked(true); }
+    $receipt = \App\Services\SuperPdp\Verification\VerificationObservation::fromResponse([
+        'operation' => 'validation', 'input_sha256' => $case === 'wrong bytes' ? str_repeat('a', 64) : hash('sha256', $this->xml),
+        'report' => $report], $response);
+    $archive = app(\App\Services\SuperPdp\PreparedCiiArchive::class);
+    if (in_array($case, ['stale', 'stale evidence'], true)) {
+        $this->travel(16)->minutes();
+        if ($case === 'stale evidence') {
+            $receipt = \App\Services\SuperPdp\Verification\VerificationObservation::fromResponse([
+                'operation' => 'validation', 'input_sha256' => hash('sha256', $this->xml), 'report' => $report], $response);
+        }
+    }
+    try {
+        expect(fn () => $archive->storeRevalidated($this->owner, $this->invoice, $this->reference, $receipt,
+            $this->manifest['verification_reference']))->toThrow(RuntimeException::class);
+        expect(count(Storage::disk('invoice_cii')->allFiles('v1/validated')))->toBe(2);
+    } finally { if (in_array($case, ['stale', 'stale evidence'], true)) { $this->travelBack(); } }
+})->with(['simulated', 'invalid report', 'wrong endpoint', 'wrong bytes', 'http', 'stale', 'stale evidence']);
+
 it('keeps default bindings and every direct SDK operation locked without explicit approval', function () {
     expect(app(EmissionPrerequisites::class))->toBeInstanceOf(ClosedEmissionPrerequisites::class)
         ->and(app(EmissionTransport::class))->toBeInstanceOf(DisabledEmissionTransport::class);

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\SupplierInvoice;
 use Bluerock\SuperPdp\SuperPdpConnector;
+use Bluerock\SuperPdp\Requests\Invoices\GetInvoiceRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response;
 use Illuminate\View\View;
@@ -394,15 +395,15 @@ public function downloadPdf(
              */
             $api = SuperPdpConnector::withToken(
                 accessToken: $connection->access_token,
-                baseUrl: $apiUrl
+                // SDK endpoints already include /v1.beta. Keep the configured
+                // host and remove only the terminal API version for this connector.
+                baseUrl: preg_replace('~/v1\.beta$~', '', $apiUrl)
             );
 
-            $superPdpResponse = $api
-                ->invoice()
-                ->download(
-                    id: (int) $supplierInvoice
-                        ->superpdp_invoice_id
-                );
+            $documentRequest = new GetInvoiceRequest((int) $supplierInvoice->superpdp_invoice_id);
+            $documentRequest->query()->set(['format' => 'original']);
+            $documentRequest->headers()->set(['Accept' => 'application/xml, application/pdf, text/xml']);
+            $superPdpResponse = $api->send($documentRequest);
 
             if ($superPdpResponse->failed()) {
                 $status = $superPdpResponse->status();
@@ -429,8 +430,7 @@ public function downloadPdf(
                     403 =>
                         'SUPER PDP ne vous autorise pas à télécharger ce document.',
 
-                        404 =>
-      'Aucun document original n’est associé à cette facture dans SUPER PDP.',
+                    404 => 'Document indisponible via SUPER PDP',
 
                     default =>
                         'SUPER PDP a refusé le téléchargement du document.',
@@ -471,9 +471,13 @@ public function downloadPdf(
                 ? 'pdf'
                 : 'xml';
 
-            $contentType = $isPdf
-                ? 'application/pdf'
-                : 'application/xml; charset=UTF-8';
+            $remoteContentType = (string) $superPdpResponse->header('Content-Type');
+            $contentType = $isPdf ? 'application/pdf' : 'application/xml';
+            // Preserve an XML encoding declared by the provider; do not label
+            // unchanged original bytes as UTF-8 unconditionally.
+            if (! $isPdf && preg_match('~^(?:application|text)/(?:[a-z0-9.+-]+\+)?xml(?:\s*;|$)~i', $remoteContentType)) {
+                $contentType = $remoteContentType;
+            }
 
             $filename = $this->downloadFilename(
                 $supplierInvoice,

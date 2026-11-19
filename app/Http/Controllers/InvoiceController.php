@@ -10,6 +10,7 @@ use App\Models\Payment;
 use App\Services\InvoiceLinePreparationService;
 use App\Services\SuperPdp\InvoiceEmissionContext;
 use App\Services\SuperPdp\InvoiceEmissionPreparation;
+use App\Services\SuperPdp\InvoiceFinalizationSummary;
 use App\Services\InvoicePartySnapshotCapture;
 use App\Services\InvoicePdfRenderer;
 use App\Services\InvoiceXmlGenerator;
@@ -91,9 +92,30 @@ class InvoiceController extends Controller
 
         // Le diagnostic relit le régime déclaré du profil. Ne pas inventer les autres
         // données de contexte à partir des montants, notes libres ou paramètres HTTP.
-        $emissionDiagnostic = $diagnostic->diagnose($invoice);
+        // A sandbox draft has no frozen context yet. Its save must display the
+        // editable summary, not run the diagnostic for a definitive document.
+        $sandboxDraft = $invoice->isDraft() && \App\Services\SuperPdp\SandboxInvoiceProfile::is($invoice);
+        $emissionDiagnostic = $sandboxDraft ? null : $diagnostic->diagnose($invoice);
 
-        return view('invoices.show', compact('invoice', 'emissionDiagnostic'));
+        $finalizationSummary = null;
+        if ($invoice->isDraft() && ($invoice->emission_profile === InvoiceEmissionContext::PROFILE || $sandboxDraft)) {
+            $finalizationSummary = app(\App\Services\SuperPdp\InvoiceFinalizationSummary::class)->build(
+                $invoice->user->company, $invoice->client, [
+                    'emission_profile' => $invoice->emission_profile,
+                    'date' => $invoice->date?->format('Y-m-d'),
+                    'due_date' => $invoice->due_date?->format('Y-m-d'),
+                    'french_business_process_type' => $invoice->french_business_process_type,
+                ], $invoice,
+            );
+        }
+
+        $sandboxDraftPreviewAvailable = app(\App\Services\SuperPdp\TricatelDraftPreviewScope::class)
+            ->allows(auth()->user(), $invoice);
+
+        $emissionReadiness = $invoice->isIssued()
+            ? app(\App\Services\SuperPdp\Emission\InvoiceEmissionReadiness::class)->inspect(auth()->user(), $invoice) : null;
+
+        return view('invoices.show', compact('invoice', 'emissionDiagnostic', 'finalizationSummary', 'sandboxDraftPreviewAvailable', 'emissionReadiness'));
     }
 
     public function handleAction(Request $request, Invoice $invoice): RedirectResponse
@@ -370,7 +392,7 @@ class InvoiceController extends Controller
     {
         $validated = $request->validate([
             'action' => ['required', 'in:draft,issue'],
-            'emission_profile' => ['nullable', 'string', Rule::in([InvoiceEmissionContext::PROFILE])],
+            'emission_profile' => ['nullable', 'string', Rule::in(\App\Services\SuperPdp\SandboxInvoiceProfile::profiles())],
             'french_business_process_type' => ['bail', 'required_if:action,issue', 'nullable', 'string', Rule::in(Invoice::FRENCH_BUSINESS_PROCESS_TYPES)],
             'client_id' => ['required', 'exists:clients,id'],
             'date' => ['required', 'date'],
@@ -385,6 +407,9 @@ class InvoiceController extends Controller
         $client = Client::where('user_id', auth()->id())
             ->findOrFail($validated['client_id']);
 
+        app(InvoiceFinalizationSummary::class)->assertProfileCompatible(
+            $validated['emission_profile'] ?? null, $request->user()->company()->first(), $client, $request->all(),
+        );
         $prepared = $linePreparation->prepare($this->translateFiscalItems($request->input('items')));
 
         DB::transaction(function () use ($validated, $client, $prepared) {
@@ -423,8 +448,11 @@ class InvoiceController extends Controller
                 abort_unless($invoice->isDraft(), 409, 'Seul un brouillon peut être validé.');
                 $this->validateStoredFrenchBusinessProcessType($invoice);
                 $this->snapshotCapture->captureForFinalization($invoice);
+                if (\App\Services\SuperPdp\SandboxInvoiceProfile::is($invoice)) {
+                    $invoice->refresh();
+                }
                 $invoice->update([
-                    'invoice_number' => Invoice::generateInvoiceNumber((int) $invoice->user_id),
+                    'invoice_number' => (\App\Services\SuperPdp\SandboxInvoiceProfile::is($invoice) ? $invoice->emission_context['test_reference'] : Invoice::generateInvoiceNumber((int) $invoice->user_id)),
                     'document_status' => 'issued',
                 ]);
                 app(InvoiceEmissionPreparation::class)->assertCompleteForFinalization($invoice);
@@ -486,7 +514,7 @@ class InvoiceController extends Controller
                     'Un brouillon comportant un règlement ou un statut de paiement incohérent ne peut pas être modifié.');
 
                 $validated = $request->validate([
-                    'emission_profile' => ['nullable', 'string', Rule::in([InvoiceEmissionContext::PROFILE])],
+                    'emission_profile' => ['nullable', 'string', Rule::in(\App\Services\SuperPdp\SandboxInvoiceProfile::profiles())],
                     'french_business_process_type' => ['bail', 'nullable', 'string', Rule::in(Invoice::FRENCH_BUSINESS_PROCESS_TYPES)],
                     'client_id' => ['required', 'exists:clients,id'],
                     'date' => ['required', 'date'],
@@ -495,6 +523,10 @@ class InvoiceController extends Controller
                     'items' => ['required', 'array', 'min:1'],
                 ], self::FRENCH_BUSINESS_PROCESS_MESSAGES);
                 $client = Client::where('user_id', auth()->id())->findOrFail($validated['client_id']);
+                app(InvoiceFinalizationSummary::class)->assertProfileCompatible(
+                    array_key_exists('emission_profile', $validated) ? $validated['emission_profile'] : $invoice->emission_profile,
+                    $request->user()->company()->first(), $client, $request->all(), $invoice,
+                );
                 $prepared = $linePreparation->prepare($this->translateFiscalItems($request->input('items')));
 
                 $invoice->update([
@@ -518,7 +550,7 @@ class InvoiceController extends Controller
 
             // Parcours historique : mêmes règles et mêmes calculs, sans migration de version.
             $validated = $request->validate([
-                'emission_profile' => ['nullable', 'string', Rule::in([InvoiceEmissionContext::PROFILE])],
+                'emission_profile' => ['nullable', 'string', Rule::in(\App\Services\SuperPdp\SandboxInvoiceProfile::profiles())],
                 'french_business_process_type' => ['bail', 'nullable', 'string', Rule::in(Invoice::FRENCH_BUSINESS_PROCESS_TYPES)],
                 'client_id' => ['required', 'exists:clients,id'],
                 'date' => ['required', 'date'],
@@ -535,6 +567,10 @@ class InvoiceController extends Controller
             $client = Client::where('user_id', auth()->id())
                 ->findOrFail($validated['client_id']);
 
+            app(InvoiceFinalizationSummary::class)->assertProfileCompatible(
+                array_key_exists('emission_profile', $validated) ? $validated['emission_profile'] : $invoice->emission_profile,
+                $request->user()->company()->first(), $client, $request->all(), $invoice,
+            );
             $subtotalHt = 0;
             $totalTva = 0;
 
@@ -659,10 +695,13 @@ class InvoiceController extends Controller
 
             $this->validateStoredFrenchBusinessProcessType($lockedInvoice);
             $this->snapshotCapture->captureForFinalization($lockedInvoice);
+            if (\App\Services\SuperPdp\SandboxInvoiceProfile::is($lockedInvoice)) {
+                $lockedInvoice->refresh();
+            }
 
             // Attribuer son numéro uniquement au moment de la validation.
             $lockedInvoice->update([
-                'invoice_number' => Invoice::generateInvoiceNumber((int) $lockedInvoice->user_id),
+                'invoice_number' => (\App\Services\SuperPdp\SandboxInvoiceProfile::is($lockedInvoice) ? $lockedInvoice->emission_context['test_reference'] : Invoice::generateInvoiceNumber((int) $lockedInvoice->user_id)),
                 'document_status' => 'issued',
                 'status' => 'non_payee',
             ]);

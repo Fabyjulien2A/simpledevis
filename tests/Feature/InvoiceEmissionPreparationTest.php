@@ -3,6 +3,7 @@
 use App\Models\Invoice;
 use App\Models\User;
 use App\Services\InvoiceElectronicPartyData;
+use App\Services\InvoiceExportDataBuilder;
 use App\Services\InvoicePartySnapshot;
 use App\Services\SuperPdp\InvoiceEmissionContext;
 use App\Services\SuperPdp\SuperPdpEmissionEligibilityDiagnostic;
@@ -49,6 +50,93 @@ afterEach(function () {
     Http::assertNothingSent();
 });
 
+it('enforces the same 35 character finalization limit for the French electronic profile', function ($length) {
+    $this->post(route('invoices.store'), ['action' => 'issue'] + $this->payload)->assertSessionHasNoErrors();
+    $invoice = Invoice::sole();
+    $before = $invoice->getRawOriginal();
+    try {
+        DB::transaction(function () use ($invoice, $length) {
+            DB::table('invoices')->where('id', $invoice->id)->update(['invoice_number' => str_repeat('N', $length)]);
+            app(\App\Services\SuperPdp\InvoiceEmissionPreparation::class)->assertCompleteForFinalization($invoice);
+            // Roll back the synthetic number after checking the accepted boundary too.
+            throw new LogicException('boundary_checked');
+        });
+    } catch (ValidationException $exception) {
+        expect($length)->toBe(36)->and($exception->errors())->toHaveKey('invoice_number');
+    } catch (LogicException $exception) {
+        expect($length)->toBe(35)->and($exception->getMessage())->toBe('boundary_checked');
+    }
+    expect($invoice->fresh()->getRawOriginal())->toBe($before);
+})->with([35, 36]);
+
+it('rejects an incompatible electronic profile before saving a new draft but preserves explicit PDF creation', function (string $party, string $field, mixed $value) {
+    ($party === 'seller' ? $this->company : $this->client)->update([$field => $value]);
+    $this->post(route('invoices.store'), $this->payload)->assertSessionHasErrors('emission_profile');
+    expect(Invoice::count())->toBe(0)->and(DB::table('invoice_items')->count())->toBe(0)
+        ->and(DB::table('invoice_counters')->count())->toBe(0);
+    $this->post(route('invoices.store'), ['action' => 'issue', 'emission_profile' => null] + $this->payload)->assertSessionHasNoErrors();
+    expect(Invoice::sole()->emission_profile)->toBeNull()->and(Invoice::sole()->emission_context)->toBeNull();
+})->with([
+    ['buyer', 'client_type', 'individual'], ['buyer', 'country_code', 'BE'],
+    ['seller', 'country_code', 'BE'], ['seller', 'country_code', null],
+]);
+
+it('rejects an incompatible profile on draft update without changing lines and permits explicit PDF fallback', function () {
+    $this->post(route('invoices.store'), $this->payload)->assertSessionHasNoErrors();
+    $draft = Invoice::sole();
+    $before = $draft->getRawOriginal();
+    $lines = $draft->items()->get()->toJson();
+    $this->client->update(['client_type' => 'individual']);
+    $this->put(route('invoices.update', $draft), $this->payload)->assertSessionHasErrors('emission_profile');
+    expect($draft->fresh()->getRawOriginal())->toBe($before)->and($draft->items()->get()->toJson())->toBe($lines);
+    $this->put(route('invoices.update', $draft), ['emission_profile' => null] + $this->payload)->assertSessionHasNoErrors();
+    expect($draft->fresh()->emission_profile)->toBeNull();
+});
+
+it('persists company and client form fields and freezes all electronic sources for a new invoice', function (string $path) {
+    // Existing isolated fixtures only: no identification values are written to real companies.
+    $sellerVat = $this->company->vat_number;
+    $this->post(route('company.update'), [
+        'tva_number' => strtolower($sellerVat), 'vat_regime' => 'subject_to_vat',
+        'country_code' => 'FR', 'siret' => $this->company->siret,
+        'billing_electronic_address' => $this->sellerAddress,
+        'invoice_recovery_indemnity_text' => 'PMT saisie', 'invoice_late_payment_penalties_text' => 'PMD saisie',
+        'invoice_early_payment_discount_text' => 'AAB saisie',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+    $clientInput = $this->client->only(['client_type', 'company_name', 'first_name', 'last_name', 'country_code', 'siret',
+        'address', 'postal_code', 'city', 'email', 'billing_electronic_address']);
+    $clientInput['vat_number'] = 'FR00552100554';
+    $this->post(route('clients.store'), $clientInput)->assertRedirect(route('clients.index'))->assertSessionHasNoErrors();
+    $client = $this->owner->clients()->orderByDesc('id')->firstOrFail();
+    expect($this->company->fresh()->vat_number)->toBe($sellerVat)
+        ->and($this->company->fresh()->tva_number)->toBe($sellerVat)->and($client->vat_number)->toBe($clientInput['vat_number']);
+    $this->post(route('invoices.store'), ['action' => $path === 'direct' ? 'issue' : 'draft', 'client_id' => $client->id] + $this->payload)->assertSessionHasNoErrors();
+    $invoice = Invoice::sole();
+    if ($path === 'draft') {
+        $this->post(route('invoices.finalize', $invoice))->assertSessionHasNoErrors();
+    }
+    $invoice->refresh();
+    $snapshot = $invoice->party_snapshot;
+    expect($snapshot['seller']['siret'])->toBe($this->company->siret)
+        ->and($snapshot['seller']['vat_number'])->toBe($sellerVat)->and($snapshot['seller']['tva_number'])->toBe($sellerVat)
+        ->and($snapshot['seller']['vat_regime'])->toBe('subject_to_vat')
+        ->and($snapshot['seller']['invoice_recovery_indemnity_text'])->toBe('PMT saisie')
+        ->and($snapshot['buyer']['siret'])->toBe($client->siret)->and($snapshot['buyer']['vat_number'])->toBe($clientInput['vat_number'])
+        ->and($snapshot['buyer']['client_type'])->toBe('professional')
+        ->and($invoice->emission_context['seller_electronic_address'])->toBe($this->sellerAddress)
+        ->and($invoice->emission_context['buyer_electronic_address'])->toBe($this->buyerAddress)
+        ->and($invoice->subtotal_ht)->toBe('100.00')->and($invoice->total_tva)->toBe('20.00')->and($invoice->total_ttc)->toBe('120.00');
+    $source = app(InvoiceExportDataBuilder::class);
+    $dataBefore = $source->buildElectronic($invoice);
+    $rawBefore = $invoice->getRawOriginal();
+    $this->company->update(['vat_number' => null, 'tva_number' => null, 'siret' => null, 'vat_regime' => null,
+        'country_code' => 'BE', 'billing_electronic_address' => null]);
+    $client->update(['siret' => null, 'vat_number' => null, 'billing_electronic_address' => null]);
+    expect($invoice->fresh()->getRawOriginal())->toBe($rawBefore)
+        ->and($source->buildElectronic($invoice))->toBe($dataBefore)
+        ->and(app(SuperPdpEmissionEligibilityDiagnostic::class)->diagnose($invoice)['local_checks_passed'])->toBeTrue();
+})->with(['direct', 'draft']);
+
 it('freezes qualified data on both finalization paths while routing stays blocked', function (string $path) {
     $this->post(route('invoices.store'), ['action' => $path === 'direct' ? 'issue' : 'draft'] + $this->payload)
         ->assertSessionHasNoErrors();
@@ -81,13 +169,14 @@ it('freezes qualified data on both finalization paths while routing stays blocke
 })->with(['direct', 'draft']);
 
 it('rolls back incomplete qualified invoices without consuming a number or persisting snapshots', function (string $target, string $field, mixed $value) {
+    $this->post(route('invoices.store'), $this->payload)->assertSessionHasNoErrors();
+    $invoice = Invoice::sole();
+    // Profile data may become incomplete or incompatible after the draft was saved.
     if ($target === 'company') {
         $this->company->update([$field => $value]);
     } else {
         $this->client->update([$field => $value]);
     }
-    $this->post(route('invoices.store'), $this->payload)->assertSessionHasNoErrors();
-    $invoice = Invoice::sole();
     $beforeCounters = DB::table('invoice_counters')->get()->toJson();
     $this->post(route('invoices.finalize', $invoice))->assertSessionHasErrors();
     $invoice->refresh();

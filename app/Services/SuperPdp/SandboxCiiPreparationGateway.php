@@ -9,6 +9,8 @@ use App\Models\User;
 use App\Services\InvoiceExportDataBuilder;
 use App\Services\SuperPdp\Emission\EmissionJson;
 use App\Services\SuperPdp\Emission\SandboxEmissionAuthorization;
+use App\Services\SuperPdp\Emission\SandboxEmissionContext;
+use App\Services\SuperPdp\Emission\SandboxInvoiceScenario;
 use App\Services\SuperPdp\Verification\VerificationObservation;
 use Bluerock\SuperPdp\Requests\Invoices\ConvertInvoiceRequest;
 use Bluerock\SuperPdp\Requests\ValidationReports\CreateValidationReportRequest;
@@ -27,6 +29,10 @@ final class SandboxCiiPreparationGateway
     private SuperPdpConnector $connector;
 
     private ?MockClient $mock = null;
+
+    private array $responseDiagnostics = [];
+
+    private array $redactionValues = [];
 
     private function __construct(
         private readonly int $userId,
@@ -73,6 +79,18 @@ final class SandboxCiiPreparationGateway
         });
     }
 
+    /** Separate CLI scope: no SQL invoice, no mutation of the historical preparation contract. */
+    public static function forScenario(
+        SandboxEmissionContext $context,
+        Company $company,
+        SuperPdpConnection $connection,
+        SandboxInvoiceScenario $scenario,
+        bool $authorizeNetwork = false,
+        ?array $responses = null,
+    ): SandboxScenarioCiiGateway {
+        return new SandboxScenarioCiiGateway($context, $company, $connection, $scenario, $authorizeNetwork, $responses);
+    }
+
     public static function forInvoice(User $actor, Invoice $invoice, string $sourceHash, string $verificationReference, ?array $responses = null): self
     {
         $stored = $invoice->newQuery()->findOrFail($invoice->id);
@@ -91,24 +109,20 @@ final class SandboxCiiPreparationGateway
         }
     }
 
+    public function reservationMode(): string
+    {
+        return $this->mock === null ? 'api' : 'simulation';
+    }
+
     public function context(): SuperPdpConnection
     {
-        if (! in_array(app()->environment(), ['local', 'staging', 'sandbox', 'testing'], true)
-            || config('services.superpdp.environment') !== 'sandbox'
-            || config('services.superpdp.api_url') !== SandboxEmissionAuthorization::API_URL
-            || ! is_string($client = config('superpdp_preparation.sandbox_client_id')) || $client === ''
-            || config('services.superpdp.client_id') !== $client) {
-            throw new RuntimeException('Explicit sandbox preparation context required.');
-        }
+        $guards = app(CiiPreparationGuards::class);
+        $client = $guards->configuration();
         $invoice = Invoice::findOrFail($this->invoiceId);
         abort_unless($invoice->user_id === $this->userId && $invoice->isIssued(), 403);
         $company = Company::where('user_id', $this->userId)->firstOrFail();
         $connection = $company->superPdpConnection()->firstOrFail();
-        $connection->assertOAuthContext('sandbox', $client, SandboxEmissionAuthorization::API_URL);
-        if (! $connection->isConnected() || $connection->tokenIsExpired() || ! $connection->access_token
-            || ! is_int($connection->superpdp_company_id) || $connection->superpdp_company_id <= 0) {
-            throw new RuntimeException('Qualified sandbox OAuth connection required; no refresh will be performed.');
-        }
+        $guards->connection($connection, $client);
         $data = app(InvoiceExportDataBuilder::class)->buildElectronic($invoice);
         if (CiiPreparationEvidence::hash($data) !== $this->sourceHash
             || ! app(SuperPdpEmissionEligibilityDiagnostic::class)->diagnose($invoice)['local_checks_passed']) {
@@ -116,19 +130,8 @@ final class SandboxCiiPreparationGateway
         }
         $evidence = app(CiiPreparationEvidence::class)->assess(User::findOrFail($this->userId), $invoice, $data, $connection, $this->verificationReference);
         if ($this->mock === null) {
-            $approval = config('superpdp_preparation.authorization');
-            if (config('superpdp_preparation.live_enabled') !== true || ! $evidence['live'] || ! is_array($approval)
-                || ! is_string($approval['approved_by'] ?? null) || trim($approval['approved_by']) === ''
-                || ! is_int($approval['approved_at'] ?? null) || ! is_int($approval['expires_at'] ?? null)
-                || $approval['approved_at'] > now()->timestamp || $approval['expires_at'] <= now()->timestamp
-                || $approval['expires_at'] <= $approval['approved_at'] || $approval['expires_at'] - $approval['approved_at'] > 900
-                || ($approval['user_id'] ?? null) !== $this->userId || ($approval['invoice_id'] ?? null) !== $this->invoiceId
-                || ($approval['source_sha256'] ?? null) !== $this->sourceHash || ($approval['verification_reference'] ?? null) !== $this->verificationReference
-                || ($approval['environment'] ?? null) !== 'sandbox' || ($approval['oauth_client_id'] ?? null) !== $client
-                || ($approval['api_url'] ?? null) !== SandboxEmissionAuthorization::API_URL
-                || ($approval['provider_company_id'] ?? null) !== $connection->superpdp_company_id) {
-                throw new RuntimeException('Real preparation locked: separate scoped API authorization and live party evidence required.');
-            }
+            $guards->authorization($this->userId, $this->invoiceId, $this->sourceHash,
+                $this->verificationReference, $connection, $client, $evidence['live']);
         }
 
         return $connection;
@@ -141,10 +144,11 @@ final class SandboxCiiPreparationGateway
             throw new RuntimeException('Only the frozen historical payload may be converted.');
         }
         $json = json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $response = $this->request(fn () => $this->connector->invoice()->convert($json, 'en16931', 'cii', 'application/json'));
+        $this->redactionValues = CiiRemoteErrorFilter::values($payload);
+        $response = $this->request('conversion', fn () => $this->connector->invoice()->convert($json, 'en16931', 'cii', 'application/json'));
         if (strtolower(trim(explode(';', (string) $response->header('Content-Type'))[0])) !== 'application/xml'
             || $response->body() === '' || strlen($response->body()) > 5242880) {
-            throw new RuntimeException('Bounded application/xml conversion output required.');
+            throw $this->responseFailure('conversion', 'unexpected_content', $response);
         }
 
         return VerificationObservation::fromResponse(['operation' => 'conversion', 'input_sha256' => hash('sha256', $json), 'xml' => $response->body()], $response);
@@ -153,12 +157,15 @@ final class SandboxCiiPreparationGateway
     public function validate(string $xml): VerificationObservation
     {
         $this->context();
-        app(CiiDocumentChecks::class)->assertMatches($xml, app(SuperPdpInvoicePayloadBuilder::class)->build(Invoice::findOrFail($this->invoiceId)));
-        $response = $this->request(fn () => $this->connector->invoice()->validate(['invoice.xml' => $xml]));
+        $invoice = Invoice::findOrFail($this->invoiceId);
+        $payload = app(SuperPdpInvoicePayloadBuilder::class)->build($invoice);
+        $this->redactionValues = CiiRemoteErrorFilter::values($payload);
+        app(CiiDocumentChecks::class)->assertInvoiceMatches($xml, $payload, $invoice);
+        $response = $this->request('validation', fn () => $this->connector->invoice()->validate(['invoice.xml' => $xml]));
         try {
             $report = EmissionJson::object($response->body());
         } catch (Throwable) {
-            throw new RuntimeException('Malformed preparation validation report.');
+            throw $this->responseFailure('validation', 'unexpected_content', $response);
         }
 
         return VerificationObservation::fromResponse(['operation' => 'validation', 'input_sha256' => hash('sha256', $xml), 'report' => $report], $response);
@@ -174,17 +181,33 @@ final class SandboxCiiPreparationGateway
         }, $this->mock?->getRecordedResponses() ?? []);
     }
 
-    private function request(#[\SensitiveParameter] callable $send): Response
+    /** Bounded response metadata only; no request payloads or raw response content. */
+    public function responseDiagnostic(string $operation): array
+    {
+        return $this->responseDiagnostics[$operation] ?? [];
+    }
+
+    private function responseFailure(string $operation, string $kind, Response $response): CiiPreparationFailure
+    {
+        return new CiiPreparationFailure(['operation' => $operation,
+            'failure_stage' => $operation.'.response', 'failure_kind' => $kind]
+            + $this->responseDiagnostics[$operation]
+            + CiiRemoteErrorFilter::extract($response->body(), $this->redactionValues));
+    }
+
+    private function request(string $operation, #[\SensitiveParameter] callable $send): Response
     {
         try {
             $response = $send();
-            if ($response->status() !== 200) {
-                throw new RuntimeException;
-            }
-
-            return $response;
-        } catch (Throwable) {
-            throw new RuntimeException('Preparation API unavailable or refused; no automatic retry and no deposit.');
+        } catch (\Saloon\Exceptions\Request\RequestException $exception) {
+            $response = $exception->getResponse();
+        } catch (Throwable $exception) {
+            throw CiiPreparationFailure::withoutResponse($operation, $exception);
         }
+        $this->responseDiagnostics[$operation] = CiiPreparationFailure::responseMetadata($response);
+        if ($response->status() !== 200) {
+            throw $this->responseFailure($operation, 'http_non_200', $response);
+        }
+        return $response;
     }
 }

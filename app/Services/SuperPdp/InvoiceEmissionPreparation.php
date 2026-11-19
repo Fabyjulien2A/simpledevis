@@ -17,6 +17,11 @@ final class InvoiceEmissionPreparation
         if ($stored->emission_profile === null) {
             return; // Le parcours classique reste disponible sans données inventées.
         }
+        if (mb_strlen((string) $stored->invoice_number) > 35) {
+            throw ValidationException::withMessages([
+                'invoice_number' => 'Le numéro d’une facture électronique ne doit pas dépasser 35 caractères (BR-FR-01 / BT-1).',
+            ]);
+        }
         $result = app(SuperPdpEmissionEligibilityDiagnostic::class)->diagnose($stored);
         $errors = [];
         foreach ($result['blockers'] as $blocker) {

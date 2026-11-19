@@ -1,0 +1,6 @@
+{
+    "HttpEmission": false,
+    "InvoiceElectronicEmissionController": true,
+    "InvoiceEmissionReadiness": false,
+    "OutgoingEmission": false
+}

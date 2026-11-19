@@ -113,6 +113,12 @@ final class InvoicePartyVerification
         return $this->finish($actor, $stored, $report);
     }
 
+    /** Parcours général de préparation : destination seule, indépendant du parcours sandbox. */
+    public function verifyDestination(User $actor, Invoice $invoice): array
+    {
+        return app(InvoiceDestinationVerification::class)->verify($actor, $invoice);
+    }
+
     private function session(VerificationObservation $observation, string $expectedClient): array
     {
         $data = $observation->data;

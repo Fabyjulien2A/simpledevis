@@ -133,6 +133,30 @@ final class ReadOnlyQualificationGateway
         return $this->observe(fn () => (new FrenchDirectoryConsultationService($this->public->frenchDirectory()))->listEntries($siren), false);
     }
 
+    /** Métadonnées de provenance même en cas d'erreur, sans conserver le corps distant. */
+    public function lastObservation(): ?VerificationObservation
+    {
+        return $this->lastResponse ? VerificationObservation::fromResponse([], $this->lastResponse) : null;
+    }
+
+    /** Annuaire public seulement : aucun jeton, lecture vendeur ou rafraîchissement OAuth. */
+    public static function forDestination(User $actor, Invoice $invoice, ?array $responses = null): self
+    {
+        $stored = $invoice->newQuery()->findOrFail($invoice->getKey());
+        abort_unless($actor->exists && $stored->user_id === $actor->id, 403);
+        abort_unless($stored->isIssued(), 404);
+        if ($responses !== null && ! app()->environment(['local', 'testing'])) {
+            throw new VerificationReadException('unavailable', 'simulations_local_only');
+        }
+        if (rtrim((string) config('services.superpdp.directory_base_url'), '/') !== 'https://api.superpdp.tech') {
+            throw new VerificationReadException('unavailable', 'official_origin_required');
+        }
+
+        return new self($actor->id, $stored->id, null, 'production', '',
+            config('superpdp_verification.destination_live_reads_enabled') === true,
+            'destination_only_gateway', null, $responses);
+    }
+
     public function company(): VerificationObservation
     {
         return $this->observe(fn () => $this->authenticated->company()->me());

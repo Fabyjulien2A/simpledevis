@@ -2,10 +2,13 @@
 
 namespace App\Services\SuperPdp;
 
+use App\Models\Company;
 use App\Models\Invoice;
 use App\Services\InvoiceElectronicPartyData;
 use App\Services\InvoiceExportDataBuilder;
 use App\Services\InvoiceFiscalDataPreparer;
+use App\Services\SuperPdp\Emission\SandboxCiiProfile;
+use App\Services\SuperPdp\Emission\SandboxEmissionContext;
 use Brick\Math\BigDecimal;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -29,6 +32,12 @@ class SuperPdpInvoicePayloadBuilder
         ?array $buyerElectronicAddress = null,
         ?array $frenchContext = null
     ): array {
+        if (SandboxInvoiceProfile::is($invoice)) {
+            if ($sellerElectronicAddress !== null || $buyerElectronicAddress !== null || $frenchContext !== null) {
+                throw new InvalidArgumentException('Le profil sandbox utilise exclusivement son contexte figé.');
+            }
+            return $this->buildFromData($this->dataBuilder->buildElectronic($invoice));
+        }
         if (! $invoice->isIssued()) {
             throw new InvalidArgumentException('Seule une facture définitive peut être préparée pour SUPER PDP.');
         }
@@ -58,7 +67,166 @@ class SuperPdpInvoicePayloadBuilder
         ?array $buyerElectronicAddress = null,
         ?array $frenchContext = null
     ): array {
+        if (($data['emission_profile'] ?? null) === SandboxInvoiceProfile::PROFILE) {
+            if ($sellerElectronicAddress !== null || $buyerElectronicAddress !== null || $frenchContext !== null) {
+                throw new InvalidArgumentException('Le contexte sandbox ne peut pas être remplacé.');
+            }
+            return SandboxInvoiceProfile::payload($data, $this);
+        }
         return $this->buildWithData(fn () => $data, $sellerElectronicAddress, $buyerElectronicAddress, $frenchContext);
+    }
+
+    /** Contrôles réutilisables avant attribution du numéro, sans construire de document. */
+    public function validatePreviewData(array $data, array $context): void
+    {
+        $checks = [
+            'seller.details' => fn () => $this->buildSeller($data['seller'] ?? [], $context['seller_electronic_address']),
+            'buyer.details' => fn () => $this->buildBuyer($data['buyer'] ?? [], $context['buyer_electronic_address']),
+            'date' => fn () => $this->requiredDate($data, 'date', 'La date d’émission'),
+            'due_date' => fn () => $this->paymentDetails($data, $data['totals']['total_ttc']),
+        ];
+        $errors = [];
+        foreach ($checks as $field => $check) {
+            try {
+                $check();
+            } catch (InvalidArgumentException $exception) {
+                $errors[$field][] = $exception->getMessage();
+            }
+        }
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+    }
+
+    /**
+     * Offline preparation only: explicit data, never a persisted production snapshot.
+     * The envelope is deliberately not a converter/deposit payload or an authorization.
+     *
+     * @return array{profile: string, ready_for_emission: false, payload: array}
+     */
+    public function buildSandboxFromData(
+        array $data,
+        SandboxEmissionContext $sandboxContext,
+        Company $company,
+        ?array $frenchContext = null
+    ): array {
+        $parties = SandboxCiiProfile::forContext($sandboxContext, $company)->toArray();
+        foreach (['party_snapshot', 'emission_context', 'emission_profile'] as $key) {
+            if (array_key_exists($key, $data)) {
+                throw new InvalidArgumentException('Le builder sandbox ne remplace pas les contrats de production : '.$key.'.');
+            }
+        }
+        foreach (['company_id' => $company->getKey(), 'user_id' => auth()->id(), 'ready_for_emission' => false,
+            'type_code' => 380, 'currency_code' => 'EUR'] as $key => $expected) {
+            if (array_key_exists($key, $data) && $data[$key] !== $expected) {
+                throw new InvalidArgumentException('Données sandbox incohérentes : '.$key.'.');
+            }
+        }
+        if (($data['document_status'] ?? null) !== 'issued') {
+            throw new InvalidArgumentException('Seule une facture définitive peut être préparée pour SUPER PDP.');
+        }
+        $this->assertNoSettlement($data);
+        $context = array_key_exists('french_business_process_type', $data)
+            ? FrenchInvoiceContext::fromInvoiceData($data, $frenchContext)
+            : FrenchInvoiceContext::fromArray($frenchContext);
+
+        // Collect missing documentary fields for both parties, using the same
+        // required-string checks as the builder. Never substitute fixture addresses.
+        $errors = [];
+        foreach (['seller' => 'Paramètres entreprise', 'buyer' => 'Fiche client'] as $role => $source) {
+            foreach (['address' => 'L’adresse postale', 'postal_code' => 'Le code postal',
+                'city' => 'La ville', 'country_code' => 'Le pays'] as $field => $label) {
+                try {
+                    $this->requiredString($data[$role] ?? [], $field, $label);
+                } catch (InvalidArgumentException $exception) {
+                    $errors[$role.'.'.$field][] = $source.' — '.$exception->getMessage();
+                }
+            }
+        }
+        // Apply the existing tax-regime checks without fabricating a French identifier.
+        $taxData = $data;
+        $taxData['seller']['vat_number'] = $parties['seller']['vat_identifier'];
+        $taxBlockers = [];
+        (new FrenchInvoiceTaxRegime)->check($taxData, [], $taxBlockers);
+        foreach ($taxBlockers as $blocker) {
+            $errors[$blocker['field']][] = $blocker['message'];
+        }
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+        $seller = $this->buildSandboxParty($data['seller'] ?? [], $parties['seller'], true);
+        $buyer = $this->buildSandboxParty($data['buyer'] ?? [], $parties['buyer'], false);
+        $fiscal = $this->fiscalPreparation->prepare(
+            $data['items'] ?? [], $data['totals'] ?? [], $data['calculation_version'] ?? null
+        );
+        $payload = [
+            'number' => $this->requiredString($data, 'invoice_number', 'Le numéro de facture'),
+            'issue_date' => $this->requiredDate($data, 'date', 'La date d’émission'),
+            'type_code' => 380,
+            'currency_code' => 'EUR',
+            'process_control' => [
+                'specification_identifier' => 'urn:cen.eu:en16931:2017',
+                'business_process_type' => $context->businessProcessType,
+            ],
+            'notes' => $context->notes,
+            'seller' => $seller,
+            'buyer' => $buyer,
+            'lines' => array_map(fn ($item, $index) => $this->buildLine($item, $index), $fiscal['items'], array_keys($fiscal['items'])),
+            'vat_break_down' => array_map(fn ($group) => $this->buildVatBreakdown($group), $fiscal['vat_breakdowns']),
+            'totals' => [
+                'sum_invoice_lines_amount' => $fiscal['totals']['subtotal_ht'],
+                'total_without_vat' => $fiscal['totals']['subtotal_ht'],
+                'total_vat_amount' => ['value' => $fiscal['totals']['total_tva'], 'currency_code' => 'EUR'],
+                'total_with_vat' => $fiscal['totals']['total_ttc'],
+                'amount_due_for_payment' => $fiscal['totals']['total_ttc'],
+            ],
+        ];
+        if ($this->optionalString($data, 'due_date', 'La date d’échéance') !== null) {
+            $payload['payment_due_date'] = $this->requiredDate($data, 'due_date', 'La date d’échéance');
+        }
+        $terms = $this->optionalString($data['seller'] ?? [], 'payment_terms', 'Les conditions de paiement');
+        if ($terms !== null) {
+            $payload['payment_terms'] = $terms;
+        }
+        if (BigDecimal::of($fiscal['totals']['total_ttc'])->isPositive()
+            && ! isset($payload['payment_due_date']) && ! isset($payload['payment_terms'])) {
+            throw new InvalidArgumentException('Une échéance ou des conditions de paiement sont obligatoires lorsque le montant dû est positif.');
+        }
+        $this->payloadValidator->validate($payload);
+        $sandboxContext->assertFor($company);
+
+        return ['profile' => SandboxCiiProfile::PROFILE, 'ready_for_emission' => false, 'payload' => $payload];
+    }
+
+    private function buildSandboxParty(array $data, array $profile, bool $seller): array
+    {
+        // Reject competing identity sources rather than silently dropping them.
+        foreach (['siret', 'siren', 'global_id', 'legal_registration_identifier', 'legal_registration_identity',
+            'tax_registration_identifier', 'superpdp_identity', 'vat_identifier', 'electronic_address', 'identifiers'] as $key) {
+            if (isset($data[$key]) && ! ($key === 'identifiers' && $data[$key] === [])) {
+                throw new InvalidArgumentException('Identifiant réservé au profil CII sandbox : '.$key.'.');
+            }
+        }
+        $name = $this->requiredString($data, $seller ? 'name' : 'company_name', 'Le nom de la partie sandbox');
+        foreach (['name', 'company_name'] as $key) {
+            if (isset($data[$key]) && $data[$key] !== $profile['name']) {
+                throw new InvalidArgumentException('Nom incohérent avec la partie sandbox autorisée.');
+            }
+        }
+        if ($name !== $profile['name'] || ($data['country_code'] ?? null) !== 'FR'
+            || (! $seller && ($data['client_type'] ?? null) !== 'professional')
+            || (isset($data['vat_number']) && $data['vat_number'] !== $profile['vat_identifier'])) {
+            throw new InvalidArgumentException('Identité, pays ou TVA incohérent avec la partie sandbox autorisée.');
+        }
+        // Reuse postal/contact/VAT validation, with no SIRET and no general identifier.
+        $partyData = $data;
+        $partyData['client_type'] = 'professional';
+        $partyData['company_name'] = $profile['name'];
+        $partyData['vat_number'] = $profile['vat_identifier'];
+        $party = $this->buildBuyer($partyData, $profile['electronic_address']);
+        $party['legal_registration_identifier'] = $profile['legal_registration_identifier'];
+
+        return $party;
     }
 
     private function buildWithData(
@@ -148,22 +316,28 @@ class SuperPdpInvoicePayloadBuilder
             ],
         ];
 
-        if ($this->optionalString($data, 'due_date', 'La date d’échéance') !== null) {
-            $payload['payment_due_date'] = $this->requiredDate($data, 'due_date', 'La date d’échéance');
-        }
-
-        $terms = $this->optionalString($data['seller'] ?? [], 'payment_terms', 'Les conditions de paiement');
-        if ($terms !== null) {
-            $payload['payment_terms'] = $terms;
-        }
-        if (BigDecimal::of($fiscal['totals']['total_ttc'])->isPositive()
-            && ! isset($payload['payment_due_date']) && ! isset($payload['payment_terms'])) {
-            throw new InvalidArgumentException('Une échéance ou des conditions de paiement sont obligatoires lorsque le montant dû est positif.');
-        }
+        $payload = array_merge($payload, $this->paymentDetails($data, $fiscal['totals']['total_ttc']));
 
         $this->payloadValidator->validate($payload);
 
         return $payload;
+    }
+
+    private function paymentDetails(array $data, string $total): array
+    {
+        $payment = [];
+        if ($this->optionalString($data, 'due_date', 'La date d’échéance') !== null) {
+            $payment['payment_due_date'] = $this->requiredDate($data, 'due_date', 'La date d’échéance');
+        }
+        $terms = $this->optionalString($data['seller'] ?? [], 'payment_terms', 'Les conditions de paiement');
+        if ($terms !== null) {
+            $payment['payment_terms'] = $terms;
+        }
+        if (BigDecimal::of($total)->isPositive() && $payment === []) {
+            throw new InvalidArgumentException('Une échéance ou des conditions de paiement sont obligatoires lorsque le montant dû est positif.');
+        }
+
+        return $payment;
     }
 
     private function assertNoSettlement(array $data): void

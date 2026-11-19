@@ -1,4 +1,5 @@
 <x-app-layout>
+    @include('invoices.partials.sandbox-notice')
     <x-slot name="header">
         <div class="flex items-center justify-between gap-4">
             <div>
@@ -79,10 +80,22 @@
             </div>
 
             @if($isDraft)
+                @if($finalizationSummary)
+                    @if($finalizationSummary['sandbox'] ?? false)
+                        @include('invoices.partials.sandbox-finalization-summary', ['summary' => $finalizationSummary])
+                        <p class="text-sm text-gray-600">Le brouillon est enregistré et reste modifiable. Le contexte et les parties seront figés uniquement à la validation définitive, après les contrôles documentaires sandbox.</p>
+                    @else
+                        @include('invoices.partials.finalization-summary', ['summary' => $finalizationSummary, 'client' => $invoice->client])
+                    @endif
+                    <a href="{{ route('invoices.show', $invoice) }}" class="inline-block text-sm text-indigo-700 underline">Actualiser le récapitulatif après modification des fiches</a>
+                @endif
                 <div class="rounded-3xl border border-amber-200 bg-amber-50 p-6">
                     <h4 class="text-lg font-semibold text-amber-900">Facture en brouillon</h4>
                     <p class="mt-2 text-sm text-amber-800">Vérifiez les informations avant de valider. Cette opération attribuera un numéro définitif et empêchera toute modification.</p>
                     <div class="mt-4 flex flex-wrap gap-3">
+                        @if($sandboxDraftPreviewAvailable ?? false)
+                            <a href="{{ route('invoices.sandbox-electronic-preview', $invoice) }}" class="rounded-xl border border-indigo-200 bg-white px-5 py-3 text-sm font-semibold text-indigo-700">Aperçu électronique (test)</a>
+                        @endif
                         <a href="{{ route('invoices.edit', $invoice) }}" class="rounded-xl border border-amber-200 bg-white px-5 py-3 text-sm font-semibold text-gray-800">Modifier le brouillon</a>
                         <form method="POST" action="{{ route('invoices.finalize', $invoice) }}" onsubmit="return confirm('Valider définitivement cette facture ? Cette action est irréversible.')">
                             @csrf
@@ -95,17 +108,26 @@
                     <div class="flex flex-wrap items-center justify-between gap-4">
                         <div>
                             <h4 class="text-lg font-semibold text-gray-900">Facturation électronique</h4>
+                            <p class="mt-1 text-sm text-gray-500">Le XML interne SimpleDevis est distinct du CII électronique et ne prouve pas l’aptitude à l’envoi.</p>
                             <p class="mt-1 text-sm text-gray-500">{{ $invoice->is_electronic ? $invoice->pdp_status_label : 'Aucun XML généré' }}</p>
                             @if($invoice->xml_generated_at)
                                 <p class="mt-1 text-sm text-gray-500">XML généré le {{ $invoice->xml_generated_at->format('d/m/Y à H:i') }}</p>
                             @endif
                         </div>
-                        <a href="{{ route('invoices.xml', $invoice) }}" class="rounded-xl bg-indigo-50 px-5 py-3 text-sm font-semibold text-indigo-700">{{ $invoice->is_electronic ? 'Télécharger le XML' : 'Générer le XML' }}</a>
+                        <div class="flex flex-wrap gap-3">
+                            <a href="{{ route('invoices.electronic-preparation', $invoice) }}" class="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white">Préparer l’envoi électronique</a>
+                            <a href="{{ route('invoices.xml', $invoice) }}" class="rounded-xl bg-indigo-50 px-5 py-3 text-sm font-semibold text-indigo-700">{{ $invoice->is_electronic ? 'Télécharger le XML interne' : 'Générer le XML interne' }}</a>
+                        </div>
                     </div>
                 </div>
             @endif
 
-            @include('invoices.partials.emission-diagnostic', ['diagnostic' => $emissionDiagnostic])
+            @if($emissionDiagnostic !== null)
+                @include('invoices.partials.emission-diagnostic', ['diagnostic' => $emissionDiagnostic])
+            @endif
+            @if($emissionReadiness)
+                @include('invoices.partials.electronic-emission')
+            @endif
 
             {{-- Avoir total : uniquement pour une facture définitive --}}
             @if(!$isDraft)

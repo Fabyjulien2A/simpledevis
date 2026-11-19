@@ -14,13 +14,13 @@ class SuperPdpOAuthService
     public function getAuthorizationUrl(Company $company, string $userEmail): string
     {
         $company = $this->ownedCompany($company->id);
-        $siren = $this->siren($company);
+        $identity = $this->identity($company);
         $environment = $this->environment();
         $state = Str::random(64);
         $verifier = Str::random(96);
         session(['superpdp_oauth' => [
             'state' => $state, 'verifier' => $verifier, 'company_id' => $company->id,
-            'user_id' => auth()->id(), 'siren' => $siren, 'environment' => $environment,
+            'user_id' => auth()->id(), 'identity' => $identity, 'environment' => $environment,
             'client_id' => $this->setting('client_id'), 'api_url' => $this->setting('api_url'),
             'redirect_uri' => $this->setting('redirect_uri'), 'created_at' => now()->timestamp,
         ]]);
@@ -32,7 +32,7 @@ class SuperPdpOAuthService
             'redirect_uri' => $this->setting('redirect_uri'), 'state' => $state, 'scope' => '',
             'code_challenge' => rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '='),
             'code_challenge_method' => 'S256', 'login_hint' => $userEmail,
-            'superpdp_company_number' => $siren, 'superpdp_company_number_scheme' => 'fr_siren',
+            'superpdp_company_number' => $identity['number'], 'superpdp_company_number_scheme' => $identity['number_scheme'],
         ]);
     }
 
@@ -59,7 +59,7 @@ class SuperPdpOAuthService
             }
         }
         $company = $this->ownedCompany($pending['company_id']);
-        if ($this->siren($company) !== $pending['siren']) {
+        if ($this->identity($company) !== ($pending['identity'] ?? null)) {
             throw new RuntimeException('L’entreprise a changé pendant la connexion OAuth.');
         }
         $tokens = $this->tokens([
@@ -74,7 +74,7 @@ class SuperPdpOAuthService
         return $company->getConnection()->transaction(function () use ($company, $pending, $tokens, $remote) {
             $locked = Company::on($company->getConnectionName())->whereKey($company->id)->lockForUpdate()->firstOrFail();
             if (! auth()->check() || auth()->id() !== $pending['user_id']
-                || $locked->user_id !== auth()->id() || $this->siren($locked) !== $pending['siren']) {
+                || $locked->user_id !== auth()->id() || $this->identity($locked) !== $pending['identity']) {
                 throw new RuntimeException('Le propriétaire ou l’identité de l’entreprise a changé.');
             }
 
@@ -88,13 +88,17 @@ class SuperPdpOAuthService
                 throw new RuntimeException('La connexion existante appartient à un autre contexte OAuth. Elle est conservée.');
             }
 
+            $values = $this->tokenValues($tokens) + [
+                'superpdp_company_id' => $remote['id'], 'environment' => $pending['environment'],
+                'oauth_client_id' => $pending['client_id'], 'api_url' => $pending['api_url'],
+                'directory_identifier' => $pending['identity']['number'], 'reception_enabled' => true,
+            ];
+            if ($pending['environment'] === 'sandbox' && ! $existing) {
+                $values += ['last_invoice_id' => 0, 'last_event_id' => 0, 'last_sync_at' => null];
+            }
+
             return SuperPdpConnection::on($company->getConnectionName())->updateOrCreate(
-                ['company_id' => $company->id],
-                $this->tokenValues($tokens) + [
-                    'superpdp_company_id' => $remote['id'], 'environment' => $pending['environment'],
-                    'oauth_client_id' => $pending['client_id'], 'api_url' => $pending['api_url'],
-                    'directory_identifier' => $pending['siren'], 'reception_enabled' => true,
-                ],
+                ['company_id' => $company->id], $values,
             );
         }, 1);
     }
@@ -109,6 +113,80 @@ class SuperPdpOAuthService
 
         return $connection->access_token && ! $connection->tokenIsExpired()
             ? $connection : $this->refreshAccessToken($connection);
+    }
+
+    /** Jeton existant uniquement : aucune requête OAuth, rotation ou écriture SQL. */
+    public function existingAccessTokenForReadOnly(Company $company, SuperPdpConnection $connection): string
+    {
+        try {
+            $ownership = [
+                'authenticated' => auth()->check(), 'company_persisted' => $company->exists,
+                'connection_persisted' => $connection->exists, 'actor_owns_company' => $company->user_id === auth()->id(),
+                'connection_belongs_to_company' => $connection->company_id === $company->getKey(),
+            ];
+            if (in_array(false, $ownership, true)) {
+                throw new ReadOnlyOAuthPrerequisiteException('oauth_ownership_invalid', $ownership);
+            }
+            try {
+                $identity = $this->identity($company);
+            } catch (Throwable) {
+                $binding = config('services.superpdp.sandbox_identity');
+                throw new ReadOnlyOAuthPrerequisiteException('oauth_identity_context_invalid', [
+                    'app_environment_sandbox' => app()->environment('sandbox') && config('app.env') === 'sandbox',
+                    'provider_environment_sandbox' => config('services.superpdp.environment') === 'sandbox',
+                    'isolated_database_selected' => config('database.default') === SandboxDatabaseIsolation::CONNECTION,
+                    'sandbox_binding_preserved' => is_array($binding) && in_array($binding['company_id'] ?? null, [3, '3'], true)
+                        && ($binding['number_scheme'] ?? null) === 'sandbox' && ($binding['number'] ?? null) === '000000002',
+                ]);
+            }
+            foreach (['client_id', 'api_url'] as $key) {
+                if (! is_string(config('services.superpdp.'.$key)) || config('services.superpdp.'.$key) === '') {
+                    throw new ReadOnlyOAuthPrerequisiteException('oauth_'.$key.'_not_configured');
+                }
+            }
+            try {
+                $connection->assertOAuthContext($this->environment(), $this->setting('client_id'), $this->setting('api_url'));
+            } catch (Throwable) {
+                throw new ReadOnlyOAuthPrerequisiteException('oauth_connection_context_mismatch', [
+                    'environment_matches' => $connection->environment === config('services.superpdp.environment'),
+                    'client_matches' => $connection->oauth_client_id === config('services.superpdp.client_id'),
+                    'api_url_matches' => $connection->api_url === config('services.superpdp.api_url'),
+                ]);
+            }
+            if ($connection->status !== 'connected') {
+                throw new ReadOnlyOAuthPrerequisiteException('oauth_connection_not_connected');
+            }
+            try {
+                $expiry = $connection->access_token_expires_at;
+                $expired = $connection->tokenIsExpired();
+            } catch (Throwable) {
+                throw new ReadOnlyOAuthPrerequisiteException('access_token_expiry_unreadable');
+            }
+            if ($expired) {
+                throw new ReadOnlyOAuthPrerequisiteException($expiry === null ? 'access_token_expiry_missing'
+                    : ($expiry->lte(now()) ? 'access_token_expired' : 'access_token_expiring_soon'), [
+                    'checked_at' => now()->toIso8601String(), 'expires_at' => $expiry?->toIso8601String(),
+                    'safety_margin_seconds' => 300,
+                ]);
+            }
+            if ($connection->directory_identifier !== $identity['number']) {
+                throw new ReadOnlyOAuthPrerequisiteException('oauth_directory_identity_mismatch');
+            }
+            try {
+                $token = $connection->access_token;
+            } catch (Throwable) {
+                throw new ReadOnlyOAuthPrerequisiteException('access_token_unreadable');
+            }
+            if (! is_string($token) || $token === '') {
+                throw new ReadOnlyOAuthPrerequisiteException('access_token_missing');
+            }
+
+            return $token;
+        } catch (ReadOnlyOAuthPrerequisiteException $exception) {
+            throw $exception;
+        } catch (Throwable) {
+            throw new ReadOnlyOAuthPrerequisiteException('oauth_read_only_check_failed');
+        }
     }
 
     public function refreshAccessToken(SuperPdpConnection $connection): SuperPdpConnection
@@ -126,9 +204,13 @@ class SuperPdpOAuthService
                 return $locked;
             }
             try {
+                $identity = $this->identity($locked->company);
+                if ($identity['number_scheme'] === 'sandbox' && $locked->directory_identifier !== $identity['number']) {
+                    throw new RuntimeException('Identité sandbox de la connexion incohérente.');
+                }
                 $tokens = $this->tokens(['grant_type' => 'refresh_token', 'refresh_token' => $locked->refresh_token]);
                 $remote = $this->remoteCompany($tokens['access_token'], $locked->company, $locked->environment);
-                if ($remote['id'] !== $locked->superpdp_company_id
+                if ($this->identity($locked->company) !== $identity || $remote['id'] !== $locked->superpdp_company_id
                     || (isset($tokens['company_id']) && $tokens['company_id'] !== $remote['id'])) {
                     throw new RuntimeException('Identité entreprise OAuth incohérente.');
                 }
@@ -170,6 +252,34 @@ class SuperPdpOAuthService
         return $environment;
     }
 
+    /** Explicit local-company binding; a sandbox identity is never inferred from a name or SIRET. */
+    private function identity(Company $company): array
+    {
+        if ($this->environment() === 'sandbox') {
+            SandboxDatabaseIsolation::assertConfiguredScope();
+            $binding = config('services.superpdp.sandbox_identity');
+            // Preserve the existing Burger Queen opt-in used by emission. Never
+            // repoint that binding to Tricatel or infer a sandbox identity from a SIRET.
+            if (! is_array($binding) || ! in_array($binding['company_id'] ?? null, [3, '3'], true)
+                || ($binding['number_scheme'] ?? null) !== 'sandbox'
+                || ($binding['number'] ?? null) !== '000000002') {
+                throw new RuntimeException('Configuration de l’identité sandbox SUPER PDP invalide.');
+            }
+            $identities = [
+                3 => ['owner_user_id' => 3, 'number' => '000000002'],
+                4 => ['owner_user_id' => 4, 'number' => '000000001'],
+            ];
+            $expected = $identities[$company->getKey()] ?? null;
+            if ($expected === null || $company->user_id !== $expected['owner_user_id']) {
+                throw new RuntimeException('Entreprise ou propriétaire non autorisé pour OAuth sandbox.');
+            }
+
+            return ['number_scheme' => 'sandbox', 'number' => $expected['number']];
+        }
+
+        return ['number_scheme' => 'fr_siren', 'number' => $this->siren($company)];
+    }
+
     private function siren(Company $company): string
     {
         $siret = preg_replace('/\D/', '', $company->siret ?? '');
@@ -182,11 +292,12 @@ class SuperPdpOAuthService
 
     private function remoteCompany(#[\SensitiveParameter] string $token, Company $company, string $environment): array
     {
+        $identity = $this->identity($company);
         $data = $this->request(fn () => Http::withToken($token)->acceptJson()->withoutRedirecting()->timeout(30)
             ->get(rtrim($this->setting('api_url'), '/').'/companies/me'));
         if (! is_int($data['id'] ?? null) || $data['id'] <= 0
-            || ($data['number_scheme'] ?? null) !== 'fr_siren'
-            || ($data['number'] ?? null) !== $this->siren($company)
+            || ($data['number_scheme'] ?? null) !== $identity['number_scheme']
+            || ($data['number'] ?? null) !== $identity['number']
             || ($data['country'] ?? null) !== 'FR' || ($data['env'] ?? null) !== $environment) {
             throw new RuntimeException('L’entreprise ou l’environnement SUPER PDP ne correspond pas à SimpleDevis.');
         }

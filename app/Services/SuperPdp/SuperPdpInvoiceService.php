@@ -180,6 +180,14 @@ public function __construct(
             throw new RuntimeException('Seules les factures entrantes SUPER PDP peuvent être importées.');
         }
 
+        $remoteCompanyId = $invoiceData['company_id'] ?? null;
+        $expectedCompanyId = $connection->superpdp_company_id;
+        if (!is_int($remoteCompanyId) || $remoteCompanyId <= 0
+            || !is_int($expectedCompanyId) || $expectedCompanyId <= 0
+            || $remoteCompanyId !== $expectedCompanyId) {
+            throw new RuntimeException('La facture SUPER PDP ne correspond pas à l’entreprise de la connexion OAuth.');
+        }
+
         return DB::transaction(function () use (
             $connection,
             $invoiceData
@@ -515,7 +523,7 @@ public function __construct(
             'fr:202' => 'received',
             'fr:203' => 'processing',
             'fr:204' => 'accepted',
-            'fr:205' => 'rejected',
+            'fr:205' => 'accepted',
             default => 'received',
         };
     }

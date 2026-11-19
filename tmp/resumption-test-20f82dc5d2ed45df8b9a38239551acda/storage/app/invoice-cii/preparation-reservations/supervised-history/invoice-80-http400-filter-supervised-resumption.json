@@ -1,0 +1,15 @@
+{
+    "invoice_id":  80,
+    "source_sha256":  "94b7bb7277990d8ac8e325a8755078d1cee54bddedf4e2769fc9f29cb6930e89",
+    "previous_journal":  "f1d94e99082d0d2a76934648014b6c0003b6f58e066012c9f9bb7c2de9eff9c2.jsonl",
+    "previous_journal_sha256":  "ce565a3abc1e8e50ebed03f2190985be8a9858795bff75a13bbf152be3b198d3",
+    "previous_state":  "review_required",
+    "reason":  "Explicit supervised retry after HTTP 400 with fully filtered message; structured error filter now corrected; conversion-only scope, no invoice deposit",
+    "previous_diagnostic_reference":  "invoice-party-checks/v1/3/80/862248180c320f497e7510542f8edc30fbb710b8f0d34721b08a128ee523b708.json",
+    "approved_by":  "explicit_user_invocation_of_supervised_runbook",
+    "recorded_at":  "2026-11-15T17:25:06.4208687Z",
+    "verification_reference":  "invoice-party-checks/v1/3/80/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json",
+    "collection_reference":  "synthetic-collection",
+    "authorization_expires_at":  1999999999,
+    "emission_authorized":  false
+}

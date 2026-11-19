@@ -37,6 +37,9 @@ final class SandboxEmissionAuthorization
 
     public function connection(int $userId, int $invoiceId, string $reference): SuperPdpConnection
     {
+        if ($invoiceId === 81) {
+            throw new RuntimeException('Invoice 81 was already sent; further sandbox emission is forbidden.');
+        }
         $approval = $this->approval();
         EmissionDocument::assertReference($reference, $userId, $invoiceId);
         if (($approval['user_id'] ?? null) !== $userId || ($approval['invoice_id'] ?? null) !== $invoiceId
@@ -45,6 +48,10 @@ final class SandboxEmissionAuthorization
         }
         $company = Company::where('user_id', $userId)->firstOrFail();
         $connection = $company->superPdpConnection()->firstOrFail();
+        if ((array_key_exists('company_id', $approval) && $approval['company_id'] !== $company->id)
+            || (array_key_exists('connection_id', $approval) && $approval['connection_id'] !== $connection->id)) {
+            throw new RuntimeException('Sandbox company or OAuth connection scope mismatch.');
+        }
         $connection->assertOAuthContext('sandbox', $approval['oauth_client_id'], self::API_URL);
         if (! $connection->isConnected() || ! is_string($connection->access_token) || $connection->access_token === ''
             || $connection->tokenIsExpired() || ! is_int($connection->superpdp_company_id) || $connection->superpdp_company_id <= 0

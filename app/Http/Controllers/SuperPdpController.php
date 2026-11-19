@@ -58,23 +58,16 @@ class SuperPdpController extends Controller
             'Aucune entreprise associée à ce compte.'
         );
 
-        if (! $company->siret) {
-            return redirect()
-                ->route('electronic-invoicing.index')
-                ->with(
-                    'error',
-                    'Renseignez d’abord le SIRET de votre entreprise.'
-                );
-        }
-
         try {
+            // The service validates the owned company and its explicit sandbox
+            // binding, or requires the existing French SIRET identity.
             $authorizationUrl = $this->oauthService
                 ->getAuthorizationUrl(
                     $company,
                     $user->email
                 );
 
-            return redirect()->away($authorizationUrl);
+            return redirect()->away($authorizationUrl, 303);
         } catch (Throwable $exception) {
             report($exception);
 

@@ -5,6 +5,7 @@ use App\Services\SuperPdp\FrenchDirectoryConsultationService;
 use Bluerock\SuperPdp\Requests\FrenchDirectory\ListFrenchDirectoryCompaniesRequest;
 use Bluerock\SuperPdp\Requests\FrenchDirectory\ListFrenchDirectoryEntriesRequest;
 use Bluerock\SuperPdp\SuperPdpConnector;
+use GuzzleHttp\HandlerStack;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Saloon\Config;
@@ -14,6 +15,7 @@ use Saloon\Exceptions\Request\RequestException;
 use Saloon\Http\Faking\MockClient;
 use Saloon\Http\Faking\MockResponse;
 use Saloon\Http\PendingRequest;
+use Saloon\Http\Senders\GuzzleSender;
 use Tests\TestCase;
 
 uses(TestCase::class);
@@ -37,6 +39,15 @@ beforeEach(function () {
     });
     Http::preventStrayRequests();
     Config::preventStrayRequests();
+    // SDK mocks still initialize Guzzle: provide a transport that cannot open
+    // a network connection even when all PHP network primitives are disabled.
+    Config::setSenderResolver(fn () => new class extends GuzzleSender
+    {
+        protected function defaultHandlerStack(): HandlerStack
+        {
+            return HandlerStack::create(static fn () => throw new RuntimeException('External network forbidden in directory tests.'));
+        }
+    });
     $this->makeDirectory = function (mixed $body, int $status = 200): FrenchDirectoryConsultationService {
         $this->mockClient = new MockClient([MockResponse::make($body, $status)]);
         $this->connector = new SuperPdpConnector;
@@ -48,6 +59,7 @@ beforeEach(function () {
 
 afterEach(function () {
     Http::assertNothingSent();
+    Config::setSenderResolver(null);
     Config::allowStrayRequests();
     if (isset($this->mockClient)) {
         foreach ($this->mockClient->getRecordedResponses() as $response) {

@@ -172,6 +172,9 @@
                                     <td class="px-6 py-4">
                                         <div class="font-semibold text-gray-900">
                                             {{ $invoice->invoice_number ?? 'Brouillon #'.$invoice->id }}
+                                            @if(\App\Services\SuperPdp\SandboxInvoiceProfile::is($invoice))
+                                                <span class="block text-xs font-bold text-amber-900">Facture de test — sans valeur fiscale</span>
+                                            @endif
                                         </div>
                                     </td>
 

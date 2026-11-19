@@ -5,6 +5,7 @@ use App\Models\Invoice;
 use App\Models\User;
 use App\Services\InvoiceExportDataBuilder;
 use App\Services\SuperPdp\CiiPreparationEvidence;
+use App\Services\SuperPdp\CiiPreparationRegistry;
 use App\Services\SuperPdp\Emission\DisabledEmissionTransport;
 use App\Services\SuperPdp\Emission\EmissionTransport;
 use App\Services\SuperPdp\Emission\SandboxEmissionAuthorization;
@@ -18,6 +19,7 @@ use Bluerock\SuperPdp\Requests\Invoices\ConvertInvoiceRequest;
 use Bluerock\SuperPdp\Requests\Invoices\CreateInvoiceRequest;
 use Bluerock\SuperPdp\Requests\ValidationReports\CreateValidationReportRequest;
 use Bluerock\SuperPdp\SuperPdpConnector;
+use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Psr7\Request as PsrRequest;
 use GuzzleHttp\Psr7\Response as PsrResponse;
 use Illuminate\Support\Facades\DB;
@@ -28,9 +30,17 @@ use Saloon\Http\Faking\MockClient;
 use Saloon\Http\Faking\MockResponse;
 use Saloon\Http\PendingRequest;
 use Saloon\Http\Response;
+use Saloon\Http\Senders\GuzzleSender;
 use Tests\Support\PreparedCiiFixture;
 
 beforeEach(function () {
+    Config::setSenderResolver(fn () => new class extends GuzzleSender
+    {
+        protected function defaultHandlerStack(): HandlerStack
+        {
+            return HandlerStack::create(static fn () => throw new RuntimeException('External network forbidden'));
+        }
+    });
     expect(config('database.default'))->toBe('sqlite')->and(config('database.connections.sqlite.database'))->toBe(':memory:');
     Http::preventStrayRequests();
     Config::preventStrayRequests();
@@ -88,6 +98,8 @@ beforeEach(function () {
         $this->fingerprint, $this->verification, ($this->responses)($overrides));
     $this->produce = fn ($gateway) => app(InvoiceCiiPreparation::class)->produce($this->owner, $this->invoice, $this->verification, $gateway);
     $this->archive = fn ($result) => app(PreparedCiiArchive::class)->read($this->owner, $this->invoice, $result['artifact']['reference']);
+    $this->failureDiagnostic = fn ($result) => app(VerificationAuditStore::class)
+        ->read($this->owner, $this->invoice, $result['diagnostic_reference'])['diagnostic'];
     $this->liveProofFixture = function () {
         // Only identity evidence is synthetically labelled live to exercise API guards.
         // All conversion/validation responses remain mocked or cached: no validated artifact.
@@ -110,6 +122,8 @@ beforeEach(function () {
 });
 
 afterEach(function () {
+    Config::setSenderResolver(null);
+    Config::clearGlobalMiddleware();
     Http::assertNothingSent();
     expect(Storage::disk('invoice_cii')->allFiles('v1/validated'))->toBe([])->and(ElectronicInvoice::count())->toBe(0)
         ->and(config('superpdp_emission.sandbox_enabled'))->toBeFalse()->and(config('superpdp_emission.authorization'))->toBeNull();
@@ -162,6 +176,63 @@ it('never promotes SDK mocks even when a separately authorized real preparation 
         ->and(($this->archive)($result)['manifest']['provenance'])->toBe('simulated');
     $mock->assertSentCount(2);
 });
+
+it('connects the sandbox HTTP POST to the real producer using simulated SDK replies and existing private results', function () {
+    ($this->grant)();
+    $this->app->instance('env', 'sandbox');
+    config(['app.env' => 'sandbox', 'superpdp_preparation.web_enabled' => true]);
+    $mock = MockClient::global(($this->responses)());
+    $csrf = str_repeat('c', 40);
+    $this->withSession(['_token' => $csrf]);
+    $invoiceBefore = $this->invoice->fresh()->getRawOriginal();
+    $connectionBefore = $this->connection->fresh()->getRawOriginal();
+    DB::connection()->beforeExecuting(function ($sql) {
+        if (! preg_match('/^\s*select\b/i', $sql)) {
+            throw new RuntimeException('No SQL writes allowed during preparation');
+        }
+    });
+    $this->post(route('invoices.request-cii-preparation', $this->invoice), ['_token' => $csrf,
+        'authorization' => ['approved_by' => 'untrusted browser'], 'verification_reference' => 'documentary-reference/first-reference',
+        'source_sha256' => str_repeat('0', 64), 'document_path' => 'document.cii.xml'])
+        ->assertStatus(303)->assertSessionHas('cii_request_status', 'review');
+    $mock->assertSentCount(2);
+    $reservation = app(CiiPreparationRegistry::class)->consult($this->owner, $this->invoice);
+    expect($reservation['state'])->toBe('review_required')
+        ->and($reservation['result']['status'])->toBe('prepared_simulation');
+    $this->get(route('invoices.electronic-preparation', $this->invoice))->assertOk()->assertSee('Document de simulation uniquement');
+    $this->get(route('invoices.cii-download', ['invoice' => $this->invoice, 'reservation' => $reservation['reservation_id']]))
+        ->assertOk()->assertContent($this->xml)->assertHeader('Cache-Control', 'no-store, private');
+    $this->post(route('invoices.request-cii-preparation', $this->invoice), ['_token' => $csrf])->assertStatus(303)->assertSessionHas('cii_request_status', 'review');
+    $mock->assertSentCount(2);
+    expect($this->invoice->fresh()->getRawOriginal())->toBe($invoiceBefore)
+        ->and($this->connection->fresh()->getRawOriginal())->toBe($connectionBefore);
+});
+
+it('retains the HTTP reservation after simulated conversion or validation failures and never retries', function (string $failure) {
+    ($this->grant)();
+    $this->app->instance('env', 'sandbox');
+    config(['app.env' => 'sandbox', 'superpdp_preparation.web_enabled' => true]);
+    $override = $failure === 'conversion'
+        ? [ConvertInvoiceRequest::class => MockResponse::make('UPSTREAM-SECRET', 503)]
+        : [CreateValidationReportRequest::class => MockResponse::make('UPSTREAM-SECRET', 503)];
+    $mock = MockClient::global(($this->responses)($override));
+    $csrf = str_repeat('d', 40);
+    $this->withSession(['_token' => $csrf]);
+    $before = $this->invoice->fresh()->getRawOriginal();
+    for ($i = 0; $i < 2; $i++) {
+        $this->post(route('invoices.request-cii-preparation', $this->invoice), ['_token' => $csrf])
+            ->assertStatus(303)->assertSessionHas('cii_request_status', 'review')
+            ->assertSessionHas('cii_request_messages', fn ($messages) => ! str_contains(implode(' ', $messages), 'UPSTREAM-SECRET'));
+    }
+    $mock->assertSentCount($failure === 'conversion' ? 1 : 2);
+    $reservation = app(CiiPreparationRegistry::class)->consult($this->owner, $this->invoice);
+    expect($reservation['state'])->toBe('review_required')->and($this->invoice->fresh()->getRawOriginal())->toBe($before);
+    if ($failure === 'validation') {
+        $artifact = $reservation['result']['artifact'];
+        $stored = app(PreparedCiiArchive::class)->read($this->owner, $this->invoice, $artifact['reference']);
+        expect($stored['xml'])->toBe($this->xml)->and($stored['manifest']['validation']['status'])->toBe('unavailable');
+    }
+})->with(['conversion', 'validation']);
 
 it('ignores provider flags attempting to claim live validation in a mocked body', function () {
     $report = PreparedCiiFixture::report($this->xml) + ['source' => 'live', 'ready_for_emission' => true];
@@ -236,13 +307,34 @@ it('does not archive malformed foreign or inconsistent converted documents', fun
     $result = ($this->produce)($gateway);
     expect($result['reason'])->toBe('conversion_failed')->and($result['artifact'])->toBeNull()
         ->and(array_column($gateway->requests(), 'class'))->toBe([ConvertInvoiceRequest::class]);
+    $diagnostic = ($this->failureDiagnostic)($result);
+    expect($diagnostic['http_status'])->toBe(200)->and($diagnostic['response_sha256'])->toBe(hash('sha256', $xml))
+        ->and($diagnostic['failure_stage'])->toBe($xml === '' ? 'conversion.response'
+            : ($xml === '<Invoice>not CII</Invoice>' ? 'conversion.local_cii_checks' : 'conversion.xml'));
 })->with(['<bad>', '<Invoice>not CII</Invoice>', '<!DOCTYPE x SYSTEM "https://forbidden.test"><x/>', '']);
+
+it('accepts contract XML responses with charset BOM and equivalent namespace prefixes', function ($variant) {
+    $xml = match ($variant) {
+        'bom' => "\xEF\xBB\xBF".$this->xml,
+        'prefix' => str_replace(['rsm:', 'xmlns:rsm='], ['cii:', 'xmlns:cii='], $this->xml),
+        default => $this->xml,
+    };
+    $gateway = ($this->gateway)([ConvertInvoiceRequest::class => MockResponse::make($xml, 200,
+        ['Content-Type' => 'Application/XML; charset=UTF-8']),
+        CreateValidationReportRequest::class => MockResponse::make(PreparedCiiFixture::report($xml))]);
+    $result = ($this->produce)($gateway);
+    expect($result['status'])->toBe('prepared_simulation')->and($result['artifact']['validation_status'])->toBe('passed_simulation')
+        ->and($result)->not->toHaveKey('diagnostic_reference')->and(count($gateway->requests()))->toBe(2)
+        ->and(($this->archive)($result)['xml'])->toBe($xml);
+})->with(['charset', 'bom', 'prefix']);
 
 it('rejects a converted CII for another invoice or party before API validation', function (string $case) {
     $xml = $case === 'invoice' ? str_replace($this->payload['number'], 'OTHER-INVOICE', $this->xml)
         : str_replace('552100554', '999999999', $this->xml);
     $gateway = ($this->gateway)([ConvertInvoiceRequest::class => MockResponse::make($xml, 200, ['Content-Type' => 'application/xml'])]);
-    expect(($this->produce)($gateway)['reason'])->toBe('conversion_failed');
+    $result = ($this->produce)($gateway);
+    expect($result['reason'])->toBe('conversion_failed')->and($result['failure_kind'])->toBe('local_cii_rejected')
+        ->and(($this->failureDiagnostic)($result)['http_status'])->toBe(200);
     expect(count($gateway->requests()))->toBe(1);
 })->with(['invoice', 'party']);
 
@@ -251,6 +343,12 @@ it('handles conversion failures without retry fallback or leaking remote message
     $result = ($this->produce)($gateway);
     expect($result['reason'])->toBe('conversion_failed')->and($result['artifact'])->toBeNull()
         ->and(json_encode($result))->not->toContain('REMOTE-SECRET')->and(count($gateway->requests()))->toBe(1);
+    $diagnostic = ($this->failureDiagnostic)($result);
+    expect($diagnostic['http_status'])->toBe($status)->and($diagnostic['content_type'])->toBe($type)
+        ->and($diagnostic['response_size'])->toBe(strlen('REMOTE-SECRET'))
+        ->and($diagnostic['response_sha256'])->toBe(hash('sha256', 'REMOTE-SECRET'))
+        ->and($diagnostic['failure_kind'])->toBe($status === 200 ? 'unexpected_content' : 'http_non_200')
+        ->and(json_encode($diagnostic))->not->toContain('REMOTE-SECRET');
 })->with([[400, 'application/json'], [401, 'text/plain'], [302, 'text/plain'], [429, 'text/plain'], [500, 'text/plain'], [200, 'text/plain']]);
 
 it('retains known converted bytes without authorizing emission when validation fails or is unavailable', function (string $case) {
@@ -273,7 +371,91 @@ it('retains known converted bytes without authorizing emission when validation f
         ->and(($this->archive)($result)['xml'])->toBe($this->xml)->and(count($gateway->requests()))->toBe(2)
         ->and($result['artifact']['validation_status'])->toBe(in_array($case, ['http', 'json', 'duplicate'], true) ? 'unavailable' : 'failed')
         ->and(json_encode($result))->not->toContain('REMOTE-SECRET');
+    $diagnostic = ($this->failureDiagnostic)($result);
+    expect($diagnostic['operation'])->toBe('validation')
+        ->and($diagnostic['failure_kind'])->toBe(match ($case) {
+            'http' => 'http_non_200', 'json', 'duplicate' => 'unexpected_content', default => 'validation_report_rejected',
+        })->and(json_encode($diagnostic))->not->toContain('REMOTE-SECRET');
 })->with(['invalid', 'wrong_size', 'empty_checks', 'http', 'json', 'duplicate']);
+
+it('keeps transport and timeout diagnostics without retry or leaking exception contents', function ($operation, $errno) {
+    $attempts = 0;
+    $response = MockResponse::make()->throw(function (PendingRequest $pending) use (&$attempts, $errno) {
+        $attempts++;
+        return new \Saloon\Exceptions\Request\FatalRequestException(
+            new \GuzzleHttp\Exception\ConnectException('TOKEN-SECRET private address@example.test',
+                new PsrRequest('POST', 'https://api.superpdp.tech'), null, ['errno' => $errno]), $pending);
+    });
+    $request = $operation === 'conversion' ? ConvertInvoiceRequest::class : CreateValidationReportRequest::class;
+    $gateway = ($this->gateway)([$request => $response]);
+    $result = ($this->produce)($gateway);
+    $diagnostic = ($this->failureDiagnostic)($result);
+    expect($attempts)->toBe(1)->and($diagnostic['failure_stage'])->toBe($operation.'.transport')
+        ->and($diagnostic['failure_kind'])->toBe($errno === 28 ? 'timeout' : 'transport_error')
+        ->and($diagnostic['http_status'])->toBeNull()->and($diagnostic['response_sha256'])->toBeNull()
+        ->and(json_encode($diagnostic))->not->toContain('TOKEN-SECRET', 'address@example.test')
+        ->and(app(CiiPreparationRegistry::class)->existing($this->owner, $this->invoice, 'simulation')['state'])->toBe('review_required');
+    ($this->produce)($gateway);
+    expect($attempts)->toBe(1);
+})->with([['conversion', 28], ['conversion', 7], ['validation', 28], ['validation', 7]]);
+
+it('filters remote errors and arbitrary headers before storing private diagnostics', function ($message, $expected) {
+    $body = ['message' => $message, 'access_token' => 'TOKEN-SECRET', 'email' => 'person@example.test'];
+    $gateway = ($this->gateway)([ConvertInvoiceRequest::class => MockResponse::make($body, 400,
+        ['Content-Type' => 'application/json; secret=HEADER-SECRET', 'Authorization' => 'Bearer HEADER-SECRET'])]);
+    $result = ($this->produce)($gateway);
+    $diagnostic = ($this->failureDiagnostic)($result);
+    expect($diagnostic['remote_error_message'])->toBe($expected)->and($diagnostic['content_type'])->toBe('application/json')
+        ->and(json_encode($diagnostic))->not->toContain('TOKEN-SECRET', 'HEADER-SECRET', 'person@example.test');
+})->with([['Invalid invoice', 'Invalid invoice'], ['TOKEN-SECRET person@example.test', '[redacted] [redacted]']]);
+
+it('stores useful structured HTTP 400 validation errors without secrets or full payloads', function () {
+    $body = ['http_status_code' => 400, 'code' => 1234,
+        'message' => 'Validation failed for seller.vat_identifier and lines[0].invoiced_quantity',
+        'errors' => [
+            ['field' => 'seller.vat_identifier', 'type' => 'format', 'message' => 'Invalid "FR12345678901" for '.$this->payload['seller']['name'], 'value' => 'FR12345678901'],
+            ['field' => 'lines.0.invoiced_quantity', 'type' => 'decimal_parsing', 'message' => 'Cannot parse "PRIVATE-INPUT" as decimal', 'input' => 'PRIVATE-INPUT'],
+            ['field' => 'access_token', 'type' => 'not_allowed', 'message' => 'Authorization: Bearer TOKEN-SECRET; session_id=SESSION-SECRET', 'value' => 'TOKEN-SECRET'],
+        ],
+        'session_id' => 'SESSION-SECRET', 'headers' => ['Authorization' => 'Bearer TOKEN-SECRET'], 'payload' => $this->payload];
+    $gateway = ($this->gateway)([ConvertInvoiceRequest::class => MockResponse::make($body, 400, ['Content-Type' => 'application/json'])]);
+    $result = ($this->produce)($gateway);
+    $diagnostic = ($this->failureDiagnostic)($result);
+    expect($diagnostic['http_status'])->toBe(400)->and($diagnostic['remote_error_format'])->toBe('http_ko')
+        ->and($diagnostic['remote_error_code'])->toBe(1234)
+        ->and($diagnostic['remote_error_message'])->toContain('Validation failed', 'seller.vat_identifier', 'lines[0].invoiced_quantity')
+        ->and(array_column($diagnostic['remote_validation_errors'], 'field'))->toBe(['seller.vat_identifier', 'lines.0.invoiced_quantity', 'access_token'])
+        ->and(array_column($diagnostic['remote_validation_errors'], 'type'))->toBe(['format', 'decimal_parsing', 'not_allowed'])
+        ->and($diagnostic['remote_validation_errors'][0]['value'])->toBe('[redacted]')
+        ->and(json_encode($diagnostic))->not->toContain('FR12345678901', 'PRIVATE-INPUT', 'TOKEN-SECRET', 'SESSION-SECRET',
+            $this->payload['seller']['name'], $this->payload['number'], 'Authorization', '"payload"')
+        ->and(count($gateway->requests()))->toBe(1);
+});
+
+it('validates archived bytes without conversion and filters echoed payload values on failure', function () {
+    $gateway = ($this->gateway)([CreateValidationReportRequest::class => MockResponse::make([
+        'http_status_code' => 400, 'message' => 'Invalid invoice for '.$this->payload['seller']['name'],
+    ], 400)]);
+    try {
+        $gateway->validate($this->xml);
+        $this->fail('Expected validation refusal');
+    } catch (\App\Services\SuperPdp\CiiPreparationFailure $exception) {
+        expect($exception->diagnostic['operation'])->toBe('validation')
+            ->and($exception->diagnostic['http_status'])->toBe(400)
+            ->and(json_encode($exception->diagnostic))->not->toContain($this->payload['seller']['name']);
+    }
+    expect(array_column($gateway->requests(), 'class'))->toBe([CreateValidationReportRequest::class]);
+});
+
+it('keeps the uncertain registry blocking even if diagnostic storage fails', function () {
+    $gateway = ($this->gateway)([ConvertInvoiceRequest::class => MockResponse::make('SECRET', 500)]);
+    $this->mock(VerificationAuditStore::class, fn ($mock) => $mock->makePartial()
+        ->shouldReceive('store')->andThrow(new RuntimeException('storage unavailable')));
+    $result = ($this->produce)($gateway);
+    expect($result['diagnostic_status'])->toBe('unavailable')->and($result['reason'])->toBe('conversion_failed')
+        ->and(app(CiiPreparationRegistry::class)->existing($this->owner, $this->invoice, 'simulation')['state'])->toBe('review_required')
+        ->and($result)->not->toHaveKey('diagnostic_reference');
+});
 
 it('does not fall back to real requests when a conversion mock is missing', function () {
     $gateway = SandboxCiiPreparationGateway::forInvoice($this->owner, $this->invoice, $this->fingerprint, $this->verification, []);
@@ -309,12 +491,16 @@ it('publishes identical receipts idempotently and refuses tampered archives with
     $this->freezeTime();
     $gateway = ($this->gateway)();
     $result = ($this->produce)($gateway);
-    $again = ($this->produce)(($this->gateway)());
+    $secondGateway = ($this->gateway)();
+    $again = ($this->produce)($secondGateway);
     expect($again['artifact']['reference'])->toBe($result['artifact']['reference'])
+        ->and($again['reason'])->toBe('reservation_reused')->and($secondGateway->requests())->toBe([])
         ->and(count(Storage::disk('invoice_cii')->allFiles('v1/simulations')))->toBe(2);
     $path = substr($result['artifact']['reference'], strlen('invoice-cii/')).'/manifest.json';
     Storage::disk('invoice_cii')->put($path, '{}');
-    expect(($this->produce)(($this->gateway)())['reason'])->toBe('private_storage_failed')
+    $tamperedGateway = ($this->gateway)();
+    expect(($this->produce)($tamperedGateway)['reason'])->toBe('preparation_context_failed')
+        ->and($tamperedGateway->requests())->toBe([])
         ->and(Storage::disk('invoice_cii')->get($path))->toBe('{}');
 });
 

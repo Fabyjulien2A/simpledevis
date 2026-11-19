@@ -2,6 +2,9 @@
 
 namespace App\Services\SuperPdp;
 
+use App\Models\Company;
+use App\Services\SuperPdp\Emission\SandboxCiiProfile;
+use App\Services\SuperPdp\Emission\SandboxEmissionContext;
 use Brick\Math\BigDecimal;
 use DOMDocument;
 use DOMXPath;
@@ -11,10 +14,86 @@ use RuntimeException;
 final class CiiDocumentChecks
 {
     public const NS = 'urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100';
+
     private const ROOT = '/rsm:CrossIndustryInvoice';
+
     private const TRADE = self::ROOT.'/rsm:SupplyChainTradeTransaction';
+
     private const AGREEMENT = self::TRADE.'/ram:ApplicableHeaderTradeAgreement';
+
     private const SETTLEMENT = self::TRADE.'/ram:ApplicableHeaderTradeSettlement';
+
+    /**
+     * Check a sandbox builder preparation without granting conversion/deposit approval.
+     * Production assertMatches() deliberately retains its existing identifier contract.
+     */
+    public function assertSandboxMatches(
+        string $xml,
+        array $preparation,
+        SandboxEmissionContext $context,
+        Company $company
+    ): void {
+        $parties = SandboxCiiProfile::forContext($context, $company)->toArray();
+        if (count($preparation) !== 3
+            || ($preparation['profile'] ?? null) !== SandboxCiiProfile::PROFILE
+            || ($preparation['ready_for_emission'] ?? null) !== false
+            || ! is_array($preparation['payload'] ?? null)) {
+            throw new RuntimeException('Préparation CII sandbox absente, incohérente ou autorisée à tort pour émission.');
+        }
+        $payload = $preparation['payload'];
+        (new SuperPdpInvoicePayloadValidator)->validate($payload);
+        if ($payload['type_code'] !== 380 || $payload['currency_code'] !== 'EUR'
+            || $payload['process_control']['specification_identifier'] !== 'urn:cen.eu:en16931:2017') {
+            throw new RuntimeException('Périmètre CII sandbox non pris en charge.');
+        }
+        FrenchInvoiceContext::fromArray([
+            'business_process_type' => $payload['process_control']['business_process_type'],
+            'notes' => $payload['notes'],
+        ]);
+        $x = $this->parse($xml);
+        foreach (['seller' => 'Seller', 'buyer' => 'Buyer'] as $key => $role) {
+            $party = $payload[$key];
+            foreach ($parties[$key] as $field => $expected) {
+                if (($party[$field] ?? null) !== $expected) {
+                    throw new RuntimeException('Identité CII incohérente avec le profil sandbox : '.$key.'.'.$field);
+                }
+            }
+            if (array_diff(array_keys($party), ['name', 'legal_registration_identifier', 'electronic_address',
+                'vat_identifier', 'postal_address', 'contact']) !== [] || $party['postal_address']['country_code'] !== 'FR') {
+                throw new RuntimeException('Identifiant ou partie supplémentaire non autorisé dans le profil CII sandbox.');
+            }
+            $path = self::AGREEMENT.'/ram:'.$role.'TradeParty';
+            $this->count($x, $path, 1);
+            // No extra general ID, hidden 0009, or additional legal/electronic/tax ID.
+            $this->count($x, $path.'/ram:ID', 0);
+            $this->count($x, $path.'//ram:GlobalID', 0);
+            $this->count($x, $path.'//ram:ID', 2);
+            $this->count($x, $path."//*[@schemeID='0009']", 0);
+            foreach (['SpecifiedLegalOrganization' => 'ID', 'URIUniversalCommunication' => 'URIID',
+                'SpecifiedTaxRegistration' => 'ID'] as $parent => $child) {
+                $this->count($x, $path.'/ram:'.$parent, 1);
+                $this->count($x, $path.'/ram:'.$parent.'/ram:'.$child, 1);
+            }
+            foreach ([
+                '/ram:SpecifiedLegalOrganization/ram:ID' => $parties[$key]['legal_registration_identifier']['value'],
+                '/ram:SpecifiedLegalOrganization/ram:ID/@schemeID' => '0002',
+                '/ram:URIUniversalCommunication/ram:URIID' => $parties[$key]['electronic_address']['value'],
+                '/ram:URIUniversalCommunication/ram:URIID/@schemeID' => '0225',
+                '/ram:SpecifiedTaxRegistration/ram:ID' => $parties[$key]['vat_identifier'],
+                '/ram:SpecifiedTaxRegistration/ram:ID/@schemeID' => 'VA',
+            ] as $suffix => $expected) {
+                $this->count($x, $path.$suffix, 1);
+                if ($x->query($path.$suffix)->item(0)->textContent !== $expected) {
+                    throw new RuntimeException('Identifiant XML différent du profil CII sandbox : '.$path.$suffix);
+                }
+            }
+            // Local normalization only: zero IDs, exclusively after sandbox authorization.
+            // Reuse every existing date, postal, line, VAT, amount and payment check.
+            $payload[$key]['identifiers'] = [];
+        }
+        $this->assertMatches($xml, $payload);
+        $context->assertFor($company);
+    }
 
     public function assertMatches(string $xml, array $payload): void
     {
@@ -113,6 +192,22 @@ final class CiiDocumentChecks
         }
     }
 
+    /** Invoice-aware dispatch; the French matcher itself remains unchanged. */
+    public function assertInvoiceMatches(string $xml, array $payload, \App\Models\Invoice $invoice): void
+    {
+        if (SandboxInvoiceProfile::is($invoice)) {
+            $expected = app(SuperPdpInvoicePayloadBuilder::class)->build($invoice);
+            if (CiiPreparationEvidence::hash($expected) !== CiiPreparationEvidence::hash($payload)) {
+                throw new RuntimeException('Document sandbox différent des données figées.');
+            }
+            $company = \App\Models\Company::on($invoice->getConnectionName())->findOrFail(3);
+            $this->assertSandboxMatches($xml, ['profile' => \App\Services\SuperPdp\Emission\SandboxCiiProfile::PROFILE,
+                'ready_for_emission' => false, 'payload' => $payload], SandboxEmissionContext::forCompany($company), $company);
+            return;
+        }
+        $this->assertMatches($xml, $payload);
+    }
+
     public function assertReport(array $report, string $xml): void
     {
         $rows = $report['data'] ?? null;
@@ -141,6 +236,12 @@ final class CiiDocumentChecks
         if ($checks === 0) {
             throw new RuntimeException('Aucun contrôle de validation attesté.');
         }
+    }
+
+    /** Structural XML safety only; neither fiscal validation nor emission qualification. */
+    public function assertCiiXml(string $xml): void
+    {
+        $this->parse($xml);
     }
 
     private function parse(string $xml): DOMXPath

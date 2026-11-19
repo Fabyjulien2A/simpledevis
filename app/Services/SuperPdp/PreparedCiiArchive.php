@@ -14,6 +14,27 @@ use RuntimeException;
 /** Paquet privé immuable CII + manifeste ; aucun lien public, aucune suppression d'archive. */
 class PreparedCiiArchive
 {
+    /** Private sibling of immutable packages; no public URL and no SQL ledger. */
+    public function reservationDirectory(bool $create = true): ?string
+    {
+        $root = $this->root($create, ! $create);
+        if ($root === null) {
+            return null;
+        }
+        $path = $root.DIRECTORY_SEPARATOR.'preparation-reservations';
+        if (! file_exists($path) && ! is_link($path)) {
+            if (! $create) {
+                return null;
+            }
+            if (! @mkdir($path, 0700) && ! is_dir($path)) {
+                throw new RuntimeException('Répertoire de réservations CII indisponible.');
+            }
+        }
+        $this->assertPath($path);
+
+        return $path;
+    }
+
     public function store(User $actor, Invoice $invoice, string $xml, array $manifest): array
     {
         $stored = $this->owned($actor, $invoice);
@@ -49,7 +70,7 @@ class PreparedCiiArchive
                 throw new RuntimeException('Matching conversion receipt required.');
             }
             $checks = app(CiiDocumentChecks::class);
-            $checks->assertMatches($xml, $payload);
+            $checks->assertInvoiceMatches($xml, $payload, $stored);
             $evidenceService = app(CiiPreparationEvidence::class);
             $evidenceService->fresh($conversion->observedAt);
             $company = Company::on($invoice->getConnectionName())->where('user_id', $actor->id)->firstOrFail();
@@ -102,8 +123,68 @@ class PreparedCiiArchive
         }, 1);
     }
 
+    /** Fresh validation of immutable bytes, never a new conversion or rewritten history. */
+    public function storeRevalidated(User $actor, Invoice $invoice, string $originalReference,
+        VerificationObservation $validation, string $verificationReference): array
+    {
+        return $invoice->getConnection()->transaction(function () use ($actor, $invoice, $originalReference, $validation, $verificationReference) {
+            User::on($invoice->getConnectionName())->whereKey($actor->id)->lockForUpdate()->firstOrFail();
+            $locked = $invoice->newQuery()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            $stored = $this->owned($actor, $locked);
+            if (\App\Models\ElectronicInvoice::where('invoice_id', $stored->id)->exists()) {
+                throw new RuntimeException('Existing emission forbids document revalidation for a new send.');
+            }
+            $original = $this->readValidated($actor, $stored, $originalReference);
+            $m = $original['manifest'];
+            $xml = $original['xml'];
+            $data = app(InvoiceExportDataBuilder::class)->buildElectronic($stored);
+            $payload = app(SuperPdpInvoicePayloadBuilder::class)->buildFromData($data);
+            $guards = app(CiiPreparationGuards::class);
+            $client = $guards->configuration();
+            $connection = Company::on($stored->getConnectionName())->where('user_id', $actor->id)->firstOrFail()->superPdpConnection()->sole();
+            $guards->connection($connection, $client);
+            if (($m['source_sha256'] ?? null) !== CiiPreparationEvidence::hash($data)
+                || ($m['payload_sha256'] ?? null) !== CiiPreparationEvidence::hash($payload)
+                || ($m['party_snapshot_sha256'] ?? null) !== hash('sha256', $data['party_snapshot'])
+                || ($m['emission_context_sha256'] ?? null) !== hash('sha256', $data['emission_context'])
+                || ($m['environment'] ?? null) !== 'sandbox' || ($m['api_url'] ?? null) !== Emission\SandboxEmissionAuthorization::API_URL
+                || ($m['oauth_client_id'] ?? null) !== $client || ($m['provider_company_id'] ?? null) !== $connection->superpdp_company_id
+                || ($m['validation']['status'] ?? null) !== 'passed' || ($m['validation']['source'] ?? null) !== 'live'
+                || $validation->source !== 'live' || ($validation->data['operation'] ?? null) !== 'validation'
+                || ($validation->data['input_sha256'] ?? null) !== hash('sha256', $xml)
+                || ! is_array($validation->data['report'] ?? null)
+                || ($validation->request['method'] ?? null) !== 'POST'
+                || ($validation->request['endpoint'] ?? null) !== Emission\SandboxEmissionAuthorization::API_URL.'/validation_reports'
+                || ($validation->request['query'] ?? null) !== [] || ($validation->request['http_status'] ?? null) !== 200) {
+                throw new RuntimeException('Matching live validation of the archived CII required.');
+            }
+            $checks = app(CiiDocumentChecks::class);
+            $checks->assertInvoiceMatches($xml, $payload, $stored);
+            $checks->assertReport($validation->data['report'], $xml);
+            $evidence = app(CiiPreparationEvidence::class);
+            $evidence->fresh($validation->observedAt);
+            if (! $evidence->assess($actor, $stored, $data, $connection, $verificationReference)['live']) {
+                throw new RuntimeException('Fresh live party evidence required.');
+            }
+            // Preserve the original conversion receipt and dates. The new package records
+            // a new validation, linked to fresh evidence, for exactly the same CII bytes.
+            $manifest = array_replace($m, ['revalidated_from' => $originalReference,
+                'original_prepared_at' => $m['original_prepared_at'] ?? $m['prepared_at'],
+                'prepared_at' => $validation->observedAt, 'verification_reference' => $verificationReference,
+                'validation' => ['status' => 'passed', 'source' => 'live', 'observed_at' => $validation->observedAt,
+                    'cii_sha256' => hash('sha256', $xml), 'response_sha256' => $validation->sha256,
+                    'report' => $validation->data['report']]]);
+            return $this->publish($actor, $stored, $xml, $manifest, 'validated')
+                + ['validation_status' => 'passed', 'revalidated_from' => $originalReference];
+        }, 1);
+    }
+
     private function publish(User $actor, Invoice $stored, string $xml, array $manifest, string $kind): array
     {
+        if (SandboxInvoiceProfile::is($stored)) {
+            SandboxInvoiceProfile::assertRuntime();
+            $manifest['emission_profile'] = SandboxInvoiceProfile::PROFILE;
+        }
         $json = json_encode($manifest, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $hash = hash('sha256', $json);
         $root = $this->root(true);
@@ -178,6 +259,8 @@ class PreparedCiiArchive
         $manifest = $kind !== 'simulations' ? EmissionJson::object($json)
             : json_decode($json, true, 64, JSON_THROW_ON_ERROR);
         if (($manifest['user_id'] ?? null) !== $actor->id || ($manifest['invoice_id'] ?? null) !== $stored->id
+            || (SandboxInvoiceProfile::is($stored) && ($manifest['emission_profile'] ?? null) !== SandboxInvoiceProfile::PROFILE)
+            || (! SandboxInvoiceProfile::is($stored) && ($manifest['emission_profile'] ?? null) === SandboxInvoiceProfile::PROFILE)
             || ($manifest['mode'] ?? null) !== (match ($kind) {
                 'validated' => 'validated_private_document', 'pending' => 'pending_validation', default => 'offline_simulation'
             })
@@ -200,7 +283,7 @@ class PreparedCiiArchive
         return $stored;
     }
 
-    private function root(bool $create): string
+    private function root(bool $create, bool $allowMissing = false): ?string
     {
         if (config('filesystems.disks.invoice_cii.driver') !== 'local'
             || config('filesystems.disks.invoice_cii.serve', false)
@@ -208,6 +291,9 @@ class PreparedCiiArchive
             throw new RuntimeException('Stockage CII privé local requis.');
         }
         $configured = Storage::disk('invoice_cii')->path('');
+        if ($allowMissing && ! file_exists($configured) && ! is_link(rtrim($configured, '/\\'))) {
+            return null;
+        }
         if ($create && ! is_dir($configured) && ! mkdir($configured, 0700, true) && ! is_dir($configured)) {
             throw new RuntimeException('Stockage CII indisponible.');
         }

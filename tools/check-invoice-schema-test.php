@@ -7,6 +7,7 @@ ini_set('display_errors', '0');
 ini_set('log_errors', '0');
 ini_set('zend.exception_ignore_args', '1');
 require dirname(__DIR__).'/vendor/autoload.php';
+require_once __DIR__.'/support/SandboxInterfaceTrialReadiness.php';
 
 const INVOICE_TEST_DB = 'fabyjulien_simpledevis_test';
 const INVOICE_TEST_CONNECTION = 'invoice_schema_test';
@@ -21,12 +22,18 @@ function invoiceOutput(array $data): void
     echo json_encode($data, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), PHP_EOL;
 }
 
-function invoiceTestPdo(): array
+function invoiceTestPdo(?array $sandboxProfile = null): array
 {
     $root = dirname(__DIR__);
     $settings = Dotenv\Dotenv::parse(file_get_contents($root.'/.env.mariadb-test'));
     invoiceCheck(($settings['DB_DATABASE'] ?? null) === INVOICE_TEST_DB && ($settings['DB_USERNAME'] ?? null) === INVOICE_TEST_DB, 'dedicated_config_scope_invalid');
     invoiceCheck(empty($settings['DB_URL']) && empty($settings['DB_SOCKET']), 'dedicated_config_url_or_socket_forbidden');
+    if ($sandboxProfile !== null) {
+        foreach (['DB_HOST', 'DB_DATABASE', 'DB_USERNAME', 'DB_PASSWORD'] as $key) {
+            invoiceCheck(($sandboxProfile[$key] ?? null) === ($settings[$key] ?? null), 'sandbox_profile_sql_mismatch');
+        }
+        invoiceCheck(($sandboxProfile['DB_PORT'] ?? '3306') === ($settings['DB_PORT'] ?? '3306'), 'sandbox_profile_port_mismatch');
+    }
     foreach (['DB_HOST', 'DB_PASSWORD'] as $key) {
         invoiceCheck(is_string($settings[$key] ?? null) && $settings[$key] !== '' && ! str_contains($settings[$key], '${'), 'dedicated_config_incomplete');
     }
@@ -53,7 +60,7 @@ function invoiceTestPdo(): array
         'grant_count' => $grantCount, 'mariadb_version' => $identity['version'], 'production_access' => false], $options];
 }
 
-function invoiceSchemaAudit(PDO $pdo): array
+function invoiceSchemaAudit(PDO $pdo, bool $interface = false): array
 {
     $schema = [];
     foreach ($pdo->query('SELECT TABLE_NAME,COLUMN_NAME,IS_NULLABLE,COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME,ORDINAL_POSITION')->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -71,6 +78,10 @@ function invoiceSchemaAudit(PDO $pdo): array
         'clients' => ['id', 'user_id', 'billing_electronic_address'],
     ];
     $missing = [];
+    if ($interface) {
+        $required['companies'][] = 'company_name';
+        $required = array_replace($required, SimpleDevis\Tools\SuperPdp\SandboxInterfaceTrialReadiness::COLUMNS);
+    }
     foreach ($required as $table => $columns) {
         $missing[$table] = array_values(array_diff($columns, array_keys($schema[$table] ?? [])));
     }
@@ -83,10 +94,53 @@ function invoiceSchemaAudit(PDO $pdo): array
         if ((int) $index['Non_unique'] === 0) { $unique[$index['Key_name']][] = $index['Column_name']; }
     }
 
-    return ['required_missing_columns' => $missing, 'invoice_columns' => $schema['invoices'] ?? [],
+    $result = ['required_missing_columns' => $missing, 'invoice_columns' => $schema['invoices'] ?? [],
         'invoice_unique_indexes' => $unique, 'pending_migration_files' => array_values(array_diff($names, $ran)),
         'emission_preparation_migration_recorded' => in_array('2026_11_09_000001_add_invoice_emission_preparation_fields', $ran, true),
         'invoice_number_nullable' => $schema['invoices']['invoice_number']['nullable'] ?? false];
+    if ($interface) {
+        $keys = [];
+        foreach ($pdo->query('SELECT TABLE_NAME,INDEX_NAME,COLUMN_NAME,SEQ_IN_INDEX FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND NON_UNIQUE=0 ORDER BY TABLE_NAME,INDEX_NAME,SEQ_IN_INDEX')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $keys[$row['TABLE_NAME']][$row['INDEX_NAME']][] = $row['COLUMN_NAME'];
+        }
+        $engines = [];
+        foreach ($pdo->query('SELECT TABLE_NAME,ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $engines[$row['TABLE_NAME']] = $row['ENGINE'];
+        }
+        $foreignKeys = $pdo->query('SELECT k.TABLE_NAME,k.COLUMN_NAME,k.REFERENCED_TABLE_NAME,k.REFERENCED_COLUMN_NAME,r.DELETE_RULE FROM information_schema.KEY_COLUMN_USAGE k JOIN information_schema.REFERENTIAL_CONSTRAINTS r ON r.CONSTRAINT_SCHEMA=k.CONSTRAINT_SCHEMA AND r.TABLE_NAME=k.TABLE_NAME AND r.CONSTRAINT_NAME=k.CONSTRAINT_NAME WHERE k.TABLE_SCHEMA=DATABASE() AND k.REFERENCED_TABLE_NAME IS NOT NULL')->fetchAll(PDO::FETCH_ASSOC);
+        $result['interface_schema'] = SimpleDevis\Tools\SuperPdp\SandboxInterfaceTrialReadiness::schema($schema, $keys, $engines, $foreignKeys);
+        // The emission contract requires the eight keys above. OAuth ambiguity
+        // is assessed separately from actual rows; no new DDL requirement here.
+        $result['oauth_company_unique_index_present'] = in_array(['company_id'], $keys['superpdp_connections'] ?? [], true);
+        $result['interface_schema']['ready'] = $result['interface_schema']['ready'] && array_filter($missing) === []
+            && $result['pending_migration_files'] === [] && $result['invoice_number_nullable'] === true;
+    }
+
+    return $result;
+}
+
+/** Strictly local database inspection. Never decrypt or fetch OAuth credentials. */
+function invoiceInterfaceAudit(PDO $pdo, string $clientId): array
+{
+    $pdo->exec('START TRANSACTION READ ONLY');
+    try {
+        $schema = invoiceSchemaAudit($pdo, true);
+        $parties = [];
+        if (array_filter($schema['required_missing_columns']) === []) {
+            $rows = $pdo->query("SELECT c.id AS company_id,c.user_id,c.company_name,s.id AS connection_id,s.environment,s.oauth_client_id,s.api_url,s.superpdp_company_id,s.directory_identifier,s.status,s.access_token_expires_at,CASE WHEN s.access_token IS NOT NULL AND s.access_token<>'' THEN 1 ELSE 0 END AS has_access_token,CASE WHEN s.refresh_token IS NOT NULL AND s.refresh_token<>'' THEN 1 ELSE 0 END AS has_refresh_token FROM companies c LEFT JOIN superpdp_connections s ON s.company_id=c.id WHERE c.id IN (3,4) ORDER BY c.id,s.id")->fetchAll(PDO::FETCH_ASSOC);
+            $parties = SimpleDevis\Tools\SuperPdp\SandboxInterfaceTrialReadiness::parties($rows, $clientId, time());
+        }
+
+        return ['schema' => $schema['interface_schema'], 'pending_migrations' => $schema['pending_migration_files'],
+            'oauth_company_unique_index_present' => $schema['oauth_company_unique_index_present'],
+            'invoice_creation_missing_columns' => $schema['required_missing_columns'], 'existing_parties' => $parties,
+            'legal_invoice_interface' => 'blocked_for_sandbox_identities', 'own_sandbox_invoice_interface' => 'not_implemented',
+            'schema_changed' => false, 'oauth_changed' => false, 'deposit_allowed' => false];
+    } finally {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+    }
 }
 
 /** Keep only hashes in memory; compare old columns even after additive migrations. */
@@ -252,13 +306,20 @@ function invoiceExercise(PDO $pdo, array $settings): array
         'pending_migrations' => $final['pending_migration_files'], 'superpdp_network_requests' => 0, 'emission_transport_enabled' => false];
 }
 
+// Allow isolated tests to inspect metadata functions without executing the CLI.
+if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') !== __FILE__) {
+    return;
+}
+
 try {
     invoiceCheck(PHP_SAPI === 'cli', 'cli_only');
     $mode = $argv[1] ?? '--audit';
-    invoiceCheck(in_array($mode, ['--audit', '--exercise'], true) && count($argv) <= 2, 'unsupported_mode');
-    [$pdo, $settings, $identity] = invoiceTestPdo();
+    invoiceCheck(in_array($mode, ['--audit', '--interface-audit', '--exercise'], true) && count($argv) <= 2, 'unsupported_mode');
+    $profile = $mode === '--interface-audit' ? (require dirname(__DIR__).'/bootstrap/superpdp-sandbox-environment.php')() : null;
+    [$pdo, $settings, $identity] = invoiceTestPdo($profile);
     invoiceOutput(['mode' => $mode, 'isolation' => $identity, 'result' => $mode === '--audit'
-        ? invoiceSchemaAudit($pdo) : invoiceExercise($pdo, $settings)]);
+        ? invoiceSchemaAudit($pdo) : ($mode === '--interface-audit'
+            ? invoiceInterfaceAudit($pdo, $profile['SUPERPDP_CLIENT_ID']) : invoiceExercise($pdo, $settings))]);
 } catch (Throwable $exception) {
     $safe = ['status' => 'refused_or_failed', 'error_class' => get_class($exception), 'production_access' => false];
     if ($exception instanceof PDOException) {

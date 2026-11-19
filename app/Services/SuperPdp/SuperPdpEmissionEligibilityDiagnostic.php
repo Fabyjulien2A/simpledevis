@@ -3,6 +3,7 @@
 namespace App\Services\SuperPdp;
 
 use App\Models\Invoice;
+use App\Models\User;
 use App\Services\InvoiceElectronicPartyData;
 use App\Services\InvoiceExportDataBuilder;
 use App\Services\InvoiceFiscalDataPreparer;
@@ -39,6 +40,49 @@ class SuperPdpEmissionEligibilityDiagnostic
      * @return array{eligible: bool, local_checks_passed: bool, blockers: list<array{code: string, category: string, field: string, message: string}>}
      */
     public function diagnose(Invoice $invoice, array $context = []): array
+    {
+        if (SandboxInvoiceProfile::is($invoice)) {
+            return SandboxInvoiceProfile::diagnostic($invoice);
+        }
+        $payload = null;
+
+        return $this->diagnoseInvoice($invoice, $context, $payload);
+    }
+
+    /** Données pour le futur CII, en mémoire seulement ; aucune conversion, archive ou permission d'envoi. */
+    public function prepareLocal(User $actor, Invoice $invoice): array
+    {
+        abort_unless($actor->exists && auth()->id() === $actor->id && $invoice->user_id === $actor->id, 403);
+        $stored = $invoice->newQuery()->whereKey($invoice->getKey())->firstOrFail();
+        abort_unless($stored->user_id === $actor->id, 403);
+        abort_unless($stored->isIssued(), 404);
+        $payload = null;
+        $diagnostic = SandboxInvoiceProfile::is($stored) ? $this->diagnose($stored) : $this->diagnoseInvoice($stored, [], $payload);
+        if (SandboxInvoiceProfile::is($stored) && $diagnostic['local_checks_passed']) {
+            $payload = $this->payloadBuilder->build($stored);
+        }
+        // Recontrôler le propriétaire après la lecture électronique indépendante.
+        $fresh = $stored->fresh();
+        abort_if($fresh === null, 404);
+        abort_unless($fresh->user_id === $actor->id, 403);
+        abort_unless($fresh->isIssued(), 404);
+        $prepared = $payload === null ? null : [
+            'schema_version' => 1,
+            'owner_user_id' => $actor->id, 'invoice_id' => $stored->id,
+            'profile' => $stored->emission_profile, 'calculation_version' => $stored->calculation_version,
+            'document' => $payload,
+        ];
+
+        return [
+            'diagnostic' => $diagnostic, 'prepared_data' => $prepared,
+            'sha256' => $prepared === null ? null : CiiPreparationEvidence::hash($prepared),
+            'blockers' => array_values(array_filter($diagnostic['blockers'],
+                fn ($blocker) => $blocker['code'] !== 'routing.verification_unavailable')),
+            'cii_produced' => false, 'validation_performed' => false, 'emission_allowed' => false,
+        ];
+    }
+
+    private function diagnoseInvoice(Invoice $invoice, array $context, ?array &$payload): array
     {
         $blockers = [];
         $this->add($blockers, 'routing.verification_unavailable', 'verification_unavailable', 'buyer.electronic_address',
@@ -77,6 +121,21 @@ class SuperPdpEmissionEligibilityDiagnostic
             // Historique : conserver les contrôles et la lecture existants, sans autoriser un payload.
         }
 
+        return $this->diagnoseData($data, $context, $blockers, preparedPayload: $payload);
+    }
+
+    /** Aperçu non persisté : ne vaut jamais diagnostic d'une facture définitive. */
+    public function preview(array $data, array $context): array
+    {
+        $blockers = [];
+        $this->add($blockers, 'routing.verification_unavailable', 'verification_unavailable', 'buyer.electronic_address',
+            'La qualification des adresses et du routage n’est pas disponible. Une adresse déclarée ne prouve pas le routage.');
+
+        return $this->diagnoseData($data, $context, $blockers, true);
+    }
+
+    private function diagnoseData(array $data, array $context, array $blockers, bool $preview = false, ?array &$preparedPayload = null): array
+    {
         try {
             $context = InvoiceEmissionContext::resolve($data, $context);
         } catch (InvalidArgumentException $exception) {
@@ -93,10 +152,13 @@ class SuperPdpEmissionEligibilityDiagnostic
             }
         }
 
-        if (($data['document_status'] ?? null) !== 'issued') {
+        if (! $preview && ($data['document_status'] ?? null) !== 'issued') {
             $this->add($blockers, 'invoice.not_issued', 'unsupported', 'document_status', 'La facture doit être définitive.');
         }
         foreach (['invoice_number', 'date', 'calculation_version'] as $field) {
+            if ($preview && $field === 'invoice_number') {
+                continue; // Attribué par le serveur uniquement à la finalisation.
+            }
             $this->requireValue($blockers, $data, $field, 'invoice.'.$field.'.missing', 'Le champ '.$field.' de la facture est obligatoire.');
         }
         if (! $this->missing($data['calculation_version'] ?? null) && $data['calculation_version'] !== 'decimal-v1') {
@@ -133,10 +195,17 @@ class SuperPdpEmissionEligibilityDiagnostic
         }
 
         // Dernière validation partagée avec le vrai builder, sans seconde lecture SQL.
-        // Le payload temporaire n'est ni retourné ni conservé : ce résultat n'autorise aucun envoi.
-        if ($this->localChecksPassed($blockers)) {
+        // L'aperçu documentaire peut conserver le payload en mémoire ; il n'autorise aucun envoi.
+        if ($preview && $this->localChecksPassed($blockers)) {
             try {
-                $this->payloadBuilder->buildFromData($data, $context['seller_electronic_address'], $context['buyer_electronic_address'], $frenchContext);
+                $this->payloadBuilder->validatePreviewData($data, $context);
+            } catch (ValidationException $exception) {
+                $this->validationErrors($blockers, $exception, 'preview.invalid', $data);
+            }
+        }
+        if (! $preview && $this->localChecksPassed($blockers)) {
+            try {
+                $preparedPayload = $this->payloadBuilder->buildFromData($data, $context['seller_electronic_address'], $context['buyer_electronic_address'], $frenchContext);
             } catch (ValidationException $exception) {
                 $this->validationErrors($blockers, $exception, 'payload.invalid', $data);
             } catch (InvalidArgumentException $exception) {
@@ -276,7 +345,7 @@ class SuperPdpEmissionEligibilityDiagnostic
             $source = $prefix !== '' ? preg_replace('/^'.preg_quote($prefix, '/').'\.?/', '', $field) : $field;
             $value = data_get($data, $source, data_get($data['totals'] ?? [], $source));
             // Les erreurs de notes à indice/code peuvent signifier une absence ou une structure invalide.
-            $category = $code !== 'payload.invalid' && $this->missing($value) ? 'missing_data' : 'invalid_data';
+            $category = ! in_array($code, ['payload.invalid', 'preview.invalid'], true) && $this->missing($value) ? 'missing_data' : 'invalid_data';
             foreach ($messages as $message) {
                 $this->add($blockers, $code, $category, $field, $message);
             }

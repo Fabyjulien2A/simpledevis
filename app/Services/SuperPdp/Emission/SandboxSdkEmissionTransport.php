@@ -25,6 +25,8 @@ final class SandboxSdkEmissionTransport implements EmissionTransport
         private readonly string $documentReference,
         private readonly SandboxEmissionAuthorization $authorization,
         private readonly SandboxEmissionPrerequisites $prerequisites,
+        private readonly bool $http = false,
+        private readonly ?HttpEmissionConfirmation $confirmation = null,
     ) {}
 
     public function mode(): string
@@ -46,7 +48,26 @@ final class SandboxSdkEmissionTransport implements EmissionTransport
     public function assertAttemptAuthorized(string $reference): void
     {
         $this->assertReady();
+        if ($this->http) {
+            HttpEmission::assertSandboxRuntime();
+            if ($this->confirmation === null) {
+                throw new RuntimeException('Explicit HTTP confirmation required.');
+            }
+            $this->confirmation->checkTransport($this->userId, $this->invoiceId, $this->documentReference, $reference);
+
+            return;
+        }
         $this->authorization->attempt($reference);
+    }
+
+    /** Local registry access remains possible after an approval or OAuth expiry. */
+    public function assertRegistryReady(): void
+    {
+        if ($this->http) {
+            HttpEmission::assertSandboxRuntime();
+        } else {
+            $this->assertReady();
+        }
     }
 
     public function send(EmissionDocument $document, string $reference): array
@@ -95,7 +116,7 @@ final class SandboxSdkEmissionTransport implements EmissionTransport
     private function assertDeposit(EmissionDocument $document, string $reference): void
     {
         $this->assertReady();
-        $this->authorization->attempt($reference);
+        $this->assertAttemptAuthorized($reference);
         $this->authorization->document($document);
         $actual = $this->prerequisites->authorize(User::findOrFail($this->userId), Invoice::findOrFail($this->invoiceId), $this->documentReference);
         if ($document->userId !== $actual->userId || $document->invoiceId !== $actual->invoiceId
@@ -126,6 +147,15 @@ final class SandboxSdkEmissionTransport implements EmissionTransport
 
     public function assertRegistryScope(ElectronicInvoice $record): void
     {
+        if ($this->http) {
+            $this->assertRegistryReady();
+            if ($record->invoice_id !== $this->invoiceId || $record->execution_mode !== 'sandbox'
+                || $record->environment !== 'sandbox' || $record->document_reference !== $this->documentReference) {
+                throw new RuntimeException('Sandbox HTTP registry context mismatch.');
+            }
+
+            return;
+        }
         $connection = $this->assertReady();
         if ($record->invoice_id !== $this->invoiceId || $record->execution_mode !== 'sandbox' || $record->environment !== 'sandbox'
             || $record->provider_company_id !== $connection->superpdp_company_id || $record->document_reference !== $this->documentReference
@@ -136,6 +166,9 @@ final class SandboxSdkEmissionTransport implements EmissionTransport
 
     private function readConnector(int $remoteId, bool $acceptedOnly = false): SuperPdpConnector
     {
+        if ($this->http) {
+            throw new RuntimeException('Remote reads are not part of the HTTP deposit authorization.');
+        }
         $connection = $this->assertReady();
         $this->assertRead($remoteId, $acceptedOnly);
 

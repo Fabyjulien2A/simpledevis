@@ -85,13 +85,6 @@
     Télécharger le document original
 </a>
 
-    <span
-        class="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-emerald-500/50 px-4 py-2 text-sm font-semibold text-white"
-        title="Fonctionnalité en préparation"
-    >
-        Factur-X bientôt disponible
-    </span>
-
 </div>
 
             </div>

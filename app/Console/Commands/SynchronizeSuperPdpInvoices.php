@@ -25,6 +25,7 @@ class SynchronizeSuperPdpInvoices extends Command
     ): int {
         $connections = SuperPdpConnection::query()
             ->where('status', 'connected')
+            ->where('reception_enabled', true)
             ->whereNotNull('access_token')
             ->get();
 

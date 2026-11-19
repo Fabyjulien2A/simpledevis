@@ -17,6 +17,11 @@ final class CiiPreparationEvidence
     public function assess(User $actor, Invoice $invoice, array $data, SuperPdpConnection $connection, string $reference): array
     {
         $report = $this->audits->read($actor, $invoice, $reference);
+        if (SandboxInvoiceProfile::is($invoice)) {
+            app(SandboxInvoiceEvidence::class)->assertReport($invoice, $data, $connection, $report);
+        } elseif (($report['kind'] ?? null) === SandboxInvoiceEvidence::KIND) {
+            throw new RuntimeException('Une preuve sandbox ne qualifie pas une facture française.');
+        }
         if (($report['status'] ?? null) !== 'passed' || ($report['expected_environment'] ?? null) !== 'sandbox'
             || ($report['expected_provider_company_id'] ?? null) !== $connection->superpdp_company_id
             || ($report['expected_oauth_client_id'] ?? null) !== $connection->oauth_client_id

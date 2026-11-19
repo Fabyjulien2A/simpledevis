@@ -45,6 +45,9 @@ class InvoiceExportDataBuilder
      */
     public function buildElectronic(Invoice $invoice): array
     {
+        if (\App\Services\SuperPdp\SandboxInvoiceProfile::is($invoice)) {
+            \App\Services\SuperPdp\SandboxInvoiceProfile::assertRuntime();
+        }
         if (! $invoice->exists) {
             throw new InvalidArgumentException('La préparation électronique nécessite une facture enregistrée.');
         }

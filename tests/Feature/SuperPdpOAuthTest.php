@@ -24,7 +24,7 @@ beforeEach(function () {
     $this->tokens = ['access_token' => 'ACCESS-NEVER-LOG', 'refresh_token' => 'REFRESH-NEVER-LOG', 'expires_in' => 1800, 'token_type' => 'Bearer'];
     $this->remote = ['id' => 123, 'number_scheme' => 'fr_siren', 'number' => '732829320', 'country' => 'FR', 'env' => 'sandbox'];
     $this->begin = function () {
-        $response = $this->get(route('electronic-invoicing.connect'))->assertRedirect();
+        $response = $this->post(route('electronic-invoicing.connect'))->assertRedirect();
         parse_str(parse_url($response->headers->get('Location'), PHP_URL_QUERY), $query);
 
         return $query;
@@ -94,7 +94,7 @@ it('rejects changed or expired local context before exchanging secrets', functio
 it('requires authentication at both endpoints', function () {
     $query = ($this->begin)();
     auth()->logout();
-    $this->get(route('electronic-invoicing.connect'))->assertRedirect(route('login'));
+    $this->post(route('electronic-invoicing.connect'))->assertRedirect(route('login'));
     ($this->callback)($query)->assertRedirect(route('login'));
     Http::assertNothingSent();
 });

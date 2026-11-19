@@ -60,6 +60,12 @@ return [
 
     'superpdp' => [
         'environment' => env('SUPERPDP_ENVIRONMENT'),
+        // Opt-in binding to the local Burger Queen company ID; never active in production.
+        'sandbox_identity' => [
+            'company_id' => env('SUPERPDP_SANDBOX_COMPANY_ID'),
+            'number_scheme' => env('SUPERPDP_SANDBOX_COMPANY_NUMBER_SCHEME'),
+            'number' => env('SUPERPDP_SANDBOX_COMPANY_NUMBER'),
+        ],
         // Origine seule : les requêtes SDK d'annuaire ajoutent /v1.beta.
         'directory_base_url' => env('SUPERPDP_DIRECTORY_BASE_URL', 'https://api.superpdp.tech'),
         'client_id' => env('SUPERPDP_CLIENT_ID'),

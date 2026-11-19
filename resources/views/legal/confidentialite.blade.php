@@ -16,10 +16,10 @@
                     <h2 class="text-lg font-semibold text-slate-900">Responsable du traitement</h2>
                     <p class="mt-2">
                         Le responsable du traitement est Julien Faby, micro-entrepreneur,
-                        exerçant sous le nom commercial Corsica Faby Design.
+                        exerçant sous le nom commercial Corsica Digital Lab.
                     </p>
                     <p class="mt-2">
-                        Contact : <strong>corsicafabydesign@gmail.com</strong>
+                        Contact : <strong>contact@corsicadigitallab.fr</strong>
                     </p>
                 </section>
 

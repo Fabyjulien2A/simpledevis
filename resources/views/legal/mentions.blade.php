@@ -8,7 +8,7 @@
                     <h2 class="text-lg font-semibold text-slate-900">Éditeur du site</h2>
                     <p class="mt-2">
                         SimpleDevis est édité par Julien Faby, exerçant sous le nom commercial
-                        <strong>Corsica Faby Design</strong>, micro-entrepreneur.
+                        <strong>Corsica Digital Lab</strong>, micro-entrepreneur.
                     </p>
                     <p class="mt-2">
                         SIRET : <strong>898 216 866 00027</strong><br>
@@ -19,7 +19,7 @@
 
                 <section>
                     <h2 class="text-lg font-semibold text-slate-900">Responsable de la publication</h2>
-                    <p class="mt-2">Corsica Faby Design</p>
+                    <p class="mt-2">Corsica Digital Lab</p>
                 </section>
 
                 <section>
